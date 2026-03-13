@@ -14,6 +14,10 @@
 		AA000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100005; };
 		AA000010 /* AudioCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010; };
 		AA000011 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011; };
+		AA000012 /* VADProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012; };
+		AA000013 /* VADState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013; };
+		AA000014 /* silero_vad.onnx in Resources */ = {isa = PBXBuildFile; fileRef = AA100014; };
+		AA000020 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = AA900010; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +32,9 @@
 		AA100009 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
 		AA100010 /* AudioCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureManager.swift; sourceTree = "<group>"; };
 		AA100011 /* AudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDevice.swift; sourceTree = "<group>"; };
+		AA100012 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
+		AA100013 /* VADState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADState.swift; sourceTree = "<group>"; };
+		AA100014 /* silero_vad.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = silero_vad.onnx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -35,6 +42,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000020 /* onnxruntime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -59,6 +67,7 @@
 				AA300002 /* App */,
 				AA300003 /* Views */,
 				AA300004 /* Audio */,
+				AA300006 /* VAD */,
 			);
 			name = Aawaaz;
 			sourceTree = "<group>";
@@ -94,9 +103,19 @@
 			isa = PBXGroup;
 			children = (
 				AA100005 /* Assets.xcassets */,
+				AA100014 /* silero_vad.onnx */,
 			);
 			name = Resources;
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		AA300006 /* VAD */ = {
+			isa = PBXGroup;
+			children = (
+				AA100012 /* VADProcessor.swift */,
+				AA100013 /* VADState.swift */,
+			);
+			path = VAD;
 			sourceTree = "<group>";
 		};
 		AA300010 /* Products */ = {
@@ -123,6 +142,9 @@
 			dependencies = (
 			);
 			name = Aawaaz;
+			packageProductDependencies = (
+				AA900010 /* onnxruntime */,
+			);
 			productName = Aawaaz;
 			productReference = AA100008 /* Aawaaz.app */;
 			productType = "com.apple.product-type.application";
@@ -151,6 +173,9 @@
 				Base,
 			);
 			mainGroup = AA300000 /* Root */;
+			packageReferences = (
+				AA900001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */,
+			);
 			productRefGroup = AA300010 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -166,6 +191,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000005 /* Assets.xcassets in Resources */,
+				AA000014 /* silero_vad.onnx in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -182,6 +208,8 @@
 				AA000004 /* SettingsView.swift in Sources */,
 				AA000010 /* AudioCaptureManager.swift in Sources */,
 				AA000011 /* AudioDevice.swift in Sources */,
+				AA000012 /* VADProcessor.swift in Sources */,
+				AA000013 /* VADState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -374,6 +402,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA900001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/microsoft/onnxruntime-swift-package-manager";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.16.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA900010 /* onnxruntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA900001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
+			productName = onnxruntime;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 	};
 	rootObject = AA800001 /* Project object */;

@@ -142,7 +142,7 @@ aawaaz/
 - [x] Create Xcode project (macOS App, SwiftUI lifecycle)
 - [x] Configure as menu bar app (LSUIElement in Info.plist)
 - [x] Add whisper.cpp as Swift Package dependency
-- [ ] Add ONNX Runtime Swift package (for Silero VAD)
+- [x] Add ONNX Runtime Swift package (for Silero VAD)
 - [x] Set up code signing with microphone entitlement
 - [x] Set up .gitignore (Models/, .build/, etc.)
 
@@ -163,11 +163,11 @@ aawaaz/
 
 #### Step 1.4: Voice Activity Detection
 
-- [ ] Bundle Silero VAD ONNX model in app resources
-- [ ] `VADProcessor.swift` — Load model, run inference on 30ms audio frames
-- [ ] `VADState.swift` — State machine: idle → speech_started → speech_ongoing → speech_ended
-- [ ] Configure speech padding (300ms default) and minimum speech duration (250ms)
-- [ ] Output: emits buffered audio segments when speech ends
+- [x] Bundle Silero VAD ONNX model in app resources
+- [x] `VADProcessor.swift` — Load model, run inference on 30ms audio frames
+- [x] `VADState.swift` — State machine: idle → speech_started → speech_ongoing → speech_ended
+- [x] Configure speech padding (300ms default) and minimum speech duration (250ms)
+- [x] Output: emits buffered audio segments when speech ends
 
 #### Step 1.5: Whisper Integration
 
