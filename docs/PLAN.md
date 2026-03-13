@@ -6,12 +6,12 @@
 |-----------|-----------|-----------|
 | Language | Swift | Native macOS, required for Accessibility API, AVAudioEngine, system integration. No bridging layers |
 | UI Framework | SwiftUI + minimal AppKit | SwiftUI for all views (beginner-friendly, declarative). AppKit only for AXUIElement, CGEvent, NSEvent global monitors |
-| Transcription | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | Best Apple Silicon optimization (Metal, CoreML, NEON). Swift bindings available. GGML quantized models |
+| Transcription | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | Best Apple Silicon optimization (Metal, CoreML, NEON). Consumed via precompiled XCFramework. GGML quantized models |
 | VAD | [Silero VAD](https://github.com/snakers4/silero-vad) | Industry standard, ~2MB, language-agnostic. Run via ONNX Runtime Swift package or CoreML conversion |
 | Audio | AVAudioEngine | Apple's native audio graph. ~5ms latency, 16kHz mono tap for transcription |
 | Local LLM | [llama.cpp](https://github.com/ggerganov/llama.cpp) | Same ecosystem as whisper.cpp (same author, same model format, same patterns). Swift bindings available |
 | Remote LLM | URLSession + Codable | Simple HTTP client for Claude/OpenAI API. No SDK dependency needed |
-| Build | Xcode + Swift Package Manager | SPM for whisper.cpp and llama.cpp dependencies |
+| Build | Xcode + Swift Package Manager | SPM for dependencies. whisper.cpp via precompiled XCFramework (v1.8.3), llama.cpp and ONNX Runtime via SPM |
 | Min deployment | macOS 14 (Sonoma) | Ensures modern SwiftUI features, Metal 3, good AVAudioEngine APIs |
 
 ## Architecture
@@ -73,7 +73,7 @@ aawaaz/
 │   └── PLAN.md
 ├── Aawaaz/
 │   ├── Aawaaz.xcodeproj
-│   ├── Package.swift                    # SPM dependencies (whisper.cpp, llama.cpp, onnxruntime)
+│   ├── Package.swift                    # Local SPM package: whisper.cpp XCFramework binary target + other deps
 │   ├── App/
 │   │   ├── AawaazApp.swift              # @main, MenuBarExtra, app lifecycle
 │   │   ├── AppState.swift               # @Observable central state
@@ -141,7 +141,7 @@ aawaaz/
 
 - [x] Create Xcode project (macOS App, SwiftUI lifecycle)
 - [x] Configure as menu bar app (LSUIElement in Info.plist)
-- [x] Add whisper.cpp as Swift Package dependency
+- [x] Add whisper.cpp as XCFramework binary dependency (v1.8.3, via local SPM package)
 - [x] Add ONNX Runtime Swift package (for Silero VAD)
 - [x] Set up code signing with microphone entitlement
 - [x] Set up .gitignore (Models/, .build/, etc.)
@@ -171,13 +171,13 @@ aawaaz/
 
 #### Step 1.5: Whisper Integration
 
-- [ ] Confirm the canonical model storage path and keep all code/docs consistent with it (prefer `~/Library/Application Support/Aawaaz/Models/` for runtime downloads; use repo-local `Models/` only for development fixtures if intentionally needed)
-- [ ] `ModelManager.swift` — Check for models in ~/Library/Application Support/Aawaaz/Models/
-- [ ] `ModelCatalog.swift` — Hardcoded catalog of available models with download URLs (Hugging Face GGML repos)
-- [ ] `ModelDownloadView.swift` — Download model with progress bar (URLSession download task)
-- [ ] `WhisperManager.swift` — Load GGML model, run inference on audio buffer, return text
-- [ ] Configure: Metal acceleration enabled, no language forced (auto-detect), beam size 5
-- [ ] Handle model loading/unloading lifecycle
+- [x] Confirm the canonical model storage path and keep all code/docs consistent with it (prefer `~/Library/Application Support/Aawaaz/Models/` for runtime downloads; use repo-local `Models/` only for development fixtures if intentionally needed)
+- [x] `ModelManager.swift` — Check for models in ~/Library/Application Support/Aawaaz/Models/
+- [x] `ModelCatalog.swift` — Hardcoded catalog of available models with download URLs (Hugging Face GGML repos)
+- [x] `ModelDownloadView.swift` — Download model with progress bar (URLSession download task)
+- [x] `WhisperManager.swift` — Load GGML model, run inference on audio buffer, return text
+- [x] Configure: Metal acceleration enabled, no language forced (auto-detect), beam size 5
+- [x] Handle model loading/unloading lifecycle
 
 #### Step 1.6: Transcription Pipeline
 

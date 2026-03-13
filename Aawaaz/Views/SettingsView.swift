@@ -22,7 +22,7 @@ struct SettingsView: View {
                     Label("Audio", systemImage: "mic")
                 }
         }
-        .frame(width: 450, height: 250)
+        .frame(width: 500, height: 400)
     }
 }
 
@@ -49,12 +49,26 @@ struct ModelSettingsView: View {
     var body: some View {
         @Bindable var state = appState
 
-        Form {
-            Picker("Whisper Model", selection: $state.selectedModel) {
-                ForEach(WhisperModel.allCases) { model in
-                    Text(model.displayName).tag(model)
+        VStack(alignment: .leading, spacing: 16) {
+            // Active model selector (only downloaded models selectable)
+            if appState.modelManager.downloadedModels.isEmpty {
+                Label("No models downloaded yet. Download one below.", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .font(.callout)
+            } else {
+                Picker("Active Model", selection: $state.selectedModel) {
+                    ForEach(WhisperModel.allCases.filter { appState.modelManager.isDownloaded($0) }) { model in
+                        Text(model.displayName).tag(model)
+                    }
                 }
             }
+
+            Divider()
+
+            Text("Available Models")
+                .font(.headline)
+
+            ModelDownloadView()
         }
         .padding()
     }

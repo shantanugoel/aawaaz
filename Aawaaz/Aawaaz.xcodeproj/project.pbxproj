@@ -18,6 +18,11 @@
 		AA000013 /* VADState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100013; };
 		AA000014 /* silero_vad.onnx in Resources */ = {isa = PBXBuildFile; fileRef = AA100014; };
 		AA000020 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = AA900010; };
+		AA000015 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100015; };
+		AA000016 /* ModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016; };
+		AA000017 /* WhisperManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100017; };
+		AA000018 /* ModelDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018; };
+		AA000021 /* whisper in Frameworks */ = {isa = PBXBuildFile; productRef = AA900020; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +40,10 @@
 		AA100012 /* VADProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADProcessor.swift; sourceTree = "<group>"; };
 		AA100013 /* VADState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADState.swift; sourceTree = "<group>"; };
 		AA100014 /* silero_vad.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = silero_vad.onnx; sourceTree = "<group>"; };
+		AA100015 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		AA100016 /* ModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalog.swift; sourceTree = "<group>"; };
+		AA100017 /* WhisperManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperManager.swift; sourceTree = "<group>"; };
+		AA100018 /* ModelDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,6 +52,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000020 /* onnxruntime in Frameworks */,
+				AA000021 /* whisper in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,6 +78,8 @@
 				AA300003 /* Views */,
 				AA300004 /* Audio */,
 				AA300006 /* VAD */,
+				AA300007 /* Models */,
+				AA300008 /* Transcription */,
 			);
 			name = Aawaaz;
 			sourceTree = "<group>";
@@ -86,6 +98,7 @@
 			children = (
 				AA100003 /* MenuBarView.swift */,
 				AA100004 /* SettingsView.swift */,
+				AA100018 /* ModelDownloadView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -118,6 +131,23 @@
 			path = VAD;
 			sourceTree = "<group>";
 		};
+		AA300007 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AA100015 /* ModelManager.swift */,
+				AA100016 /* ModelCatalog.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AA300008 /* Transcription */ = {
+			isa = PBXGroup;
+			children = (
+				AA100017 /* WhisperManager.swift */,
+			);
+			path = Transcription;
+			sourceTree = "<group>";
+		};
 		AA300010 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -144,6 +174,7 @@
 			name = Aawaaz;
 			packageProductDependencies = (
 				AA900010 /* onnxruntime */,
+				AA900020 /* whisper */,
 			);
 			productName = Aawaaz;
 			productReference = AA100008 /* Aawaaz.app */;
@@ -175,6 +206,7 @@
 			mainGroup = AA300000 /* Root */;
 			packageReferences = (
 				AA900001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */,
+				AA900002 /* XCLocalSwiftPackageReference "AawaazDependencies" */,
 			);
 			productRefGroup = AA300010 /* Products */;
 			projectDirPath = "";
@@ -210,6 +242,10 @@
 				AA000011 /* AudioDevice.swift in Sources */,
 				AA000012 /* VADProcessor.swift in Sources */,
 				AA000013 /* VADState.swift in Sources */,
+				AA000015 /* ModelManager.swift in Sources */,
+				AA000016 /* ModelCatalog.swift in Sources */,
+				AA000017 /* WhisperManager.swift in Sources */,
+				AA000018 /* ModelDownloadView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -414,11 +450,22 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		AA900002 /* XCLocalSwiftPackageReference "AawaazDependencies" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		AA900010 /* onnxruntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA900001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
 			productName = onnxruntime;
+		};
+		AA900020 /* whisper */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = whisper;
 		};
 /* End XCSwiftPackageProductDependency section */
 

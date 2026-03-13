@@ -54,6 +54,9 @@ final class AppState {
     var selectedModel: WhisperModel = .turbo
     var selectedLanguage: LanguageMode = .auto
 
+    // Model management
+    var modelManager = ModelManager()
+
     // Audio device state
     var availableAudioDevices: [AudioDevice] = []
     var selectedAudioDeviceUID: String? // nil = system default
@@ -77,6 +80,17 @@ final class AppState {
         deviceObserver = AudioDeviceObserver { [weak self] in
             self?.refreshAudioDevices()
         }
+
+        // Ensure selected model is actually downloaded; fall back to first downloaded.
+        if !modelManager.isDownloaded(selectedModel),
+           let first = WhisperModel.allCases.first(where: { modelManager.isDownloaded($0) }) {
+            selectedModel = first
+        }
+    }
+
+    /// Path to the currently selected model, or nil if not yet downloaded.
+    var selectedModelPath: String? {
+        modelManager.modelPath(for: selectedModel)
     }
 
     func refreshAudioDevices() {
