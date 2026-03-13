@@ -25,7 +25,7 @@ final class AudioCaptureManager {
     static let targetSampleRate: Double = 16_000
     static let targetChannelCount: AVAudioChannelCount = 1
 
-    private let engine = AVAudioEngine()
+    private var engine: AVAudioEngine?
     private var converter: AVAudioConverter?
 
     private(set) var isCapturing = false
@@ -53,6 +53,11 @@ final class AudioCaptureManager {
     /// Delivers 16kHz mono Float32 samples via `onSamplesReceived`.
     func startCapture() throws {
         guard !isCapturing else { return }
+
+        if engine == nil {
+            engine = AVAudioEngine()
+        }
+        guard let engine else { throw AudioCaptureError.noInputDevice }
 
         let inputNode = engine.inputNode
         let hardwareFormat = inputNode.outputFormat(forBus: 0)
@@ -94,8 +99,8 @@ final class AudioCaptureManager {
 
     func stopCapture() {
         guard isCapturing else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
         converter = nil
         isCapturing = false
     }

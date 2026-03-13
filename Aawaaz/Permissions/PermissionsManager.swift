@@ -41,7 +41,7 @@ final class PermissionsManager {
     /// Prompt the user to grant accessibility permission.
     /// Opens the system prompt if permission has not been granted.
     static func promptAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
     }
 

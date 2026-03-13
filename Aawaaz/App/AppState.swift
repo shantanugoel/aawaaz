@@ -161,7 +161,12 @@ final class AppState {
             self?.reconcileSelectedModel()
         }
 
-        setupHotkey()
+        // Defer hotkey setup so it doesn't interfere with SwiftUI's initial
+        // scene and window setup (event monitors registered too early can
+        // block the run loop during launch).
+        DispatchQueue.main.async { [weak self] in
+            self?.setupHotkey()
+        }
     }
 
     /// Path to the currently selected model, or nil if not yet downloaded.

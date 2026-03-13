@@ -1,47 +1,15 @@
 import AppKit
-import SwiftUI
 
-/// Manages the onboarding window lifecycle.
+/// NSApplicationDelegate for AppKit-level setup.
 ///
-/// Creates and shows an NSWindow with the onboarding SwiftUI view on first launch.
-/// This is done programmatically because SwiftUI `Window` scenes don't auto-present
-/// reliably for menu bar apps (LSUIElement).
+/// Onboarding is handled via a native SwiftUI `Window` scene (not NSWindow)
+/// so SwiftUI manages the full event dispatch lifecycle.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var onboardingWindow: NSWindow?
-    private var onboardingHosting: NSHostingController<AnyView>?
-
-    func showOnboardingWindow(appState: AppState) {
-        guard onboardingWindow == nil else {
-            onboardingWindow?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // If onboarding will be shown, pre-emptively switch to regular activation
+        // policy so the SwiftUI Window can receive focus and events.
+        if PermissionsManager.shouldShowOnboarding {
+            NSApp.setActivationPolicy(.regular)
         }
-
-        let onboardingView = AnyView(
-            OnboardingView()
-                .environment(appState)
-        )
-
-        let hosting = NSHostingController(rootView: onboardingView)
-        self.onboardingHosting = hosting
-
-        let window = NSWindow(contentViewController: hosting)
-        window.title = "Welcome to Aawaaz"
-        window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(width: 520, height: 480))
-        window.center()
-        window.isReleasedWhenClosed = false
-
-        self.onboardingWindow = window
-
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    /// Dismiss the onboarding window.
-    func dismissOnboarding() {
-        onboardingWindow?.close()
-        onboardingWindow = nil
-        onboardingHosting = nil
     }
 }

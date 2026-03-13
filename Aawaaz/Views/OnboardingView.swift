@@ -7,6 +7,7 @@ import SwiftUI
 /// 4. Model download
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var currentStep: OnboardingStep = .welcome
     @State private var micPermissionGranted = PermissionsManager.isMicrophoneGranted
     @State private var accessibilityGranted = PermissionsManager.isAccessibilityGranted
@@ -259,8 +260,7 @@ struct OnboardingView: View {
                 Button("Get Started") {
                     PermissionsManager.hasCompletedOnboarding = true
                     appState.showOnboarding = false
-                    // Close the onboarding window
-                    NSApp.keyWindow?.close()
+                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!hasDownloadedModel)
