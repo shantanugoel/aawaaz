@@ -264,24 +264,24 @@ aawaaz/
 
 #### Step 2.5: Insertion Orchestration
 
-- [ ] `TextInsertionManager.swift`:
-  - [ ] Try AX API insertion first
-  - [ ] If AX API fails (element not found, not a text field, permission denied), fall back to keystroke simulation
-  - [ ] If keystroke simulation fails, fall back to clipboard-only with notification
-  - [ ] Log which method was used (for debugging)
+- [x] `TextInsertionManager.swift`:
+  - [x] Try AX API insertion first
+  - [x] If AX API fails (element not found, not a text field, permission denied), fall back to keystroke simulation
+  - [x] If keystroke simulation fails, fall back to clipboard-only with notification
+  - [x] Log which method was used (for debugging)
 
 #### Step 2.6: Context Detection
 
-- [ ] Detect the frontmost application name and bundle identifier
-- [ ] Detect the type of text field (single-line input, multi-line text area, code editor)
-- [ ] Pass this context to post-processing (Phase 3) for context-aware formatting
-- [ ] Store per-app preferences (e.g., always use keystroke simulation for app X)
+- [x] Detect the frontmost application name and bundle identifier
+- [x] Detect the type of text field (single-line input, multi-line text area, code editor)
+- [x] Pass this context to post-processing (Phase 3) for context-aware formatting
+- [x] Store per-app preferences (e.g., always use keystroke simulation for app X)
 
 #### Step 2.7: Settings & Verification
 
-- [ ] `SettingsView.swift` — Add a real shortcut recorder UI for editing `HotkeyConfiguration.keyCode` and `modifierFlags`, not just displaying the current shortcut
-- [ ] Add an automated test target to the Xcode project
-- [ ] Cover core Phase 1/2 integration risks with tests: VAD state transitions, Whisper integration seams, transcription pipeline orchestration, selected-model/device persistence, overlay teardown, and hold/toggle hotkey state management
+- [x] `SettingsView.swift` — Add a real shortcut recorder UI for editing `HotkeyConfiguration.keyCode` and `modifierFlags`, not just displaying the current shortcut
+- [x] Add an automated test target to the Xcode project
+- [x] Cover core Phase 1/2 integration risks with tests: VAD state transitions, Whisper integration seams, transcription pipeline orchestration, selected-model/device persistence, overlay teardown, and hold/toggle hotkey state management
 
 **Phase 2 deliverable**: Transcription is automatically typed into whatever text field is focused, in any app.
 

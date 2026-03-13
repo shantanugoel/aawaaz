@@ -33,15 +33,15 @@ struct GeneralSettingsView: View {
         Form {
             // Hotkey section
             Section("Activation") {
-                HStack {
-                    Text("Shortcut")
-                    Spacer()
-                    Text(appState.hotkeyConfig.displayString)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                        .font(.system(.body, design: .monospaced))
-                }
+                ShortcutRecorderView(
+                    configuration: Binding(
+                        get: { appState.hotkeyConfig },
+                        set: { appState.hotkeyConfig = $0 }
+                    ),
+                    onUpdate: { newConfig in
+                        appState.updateHotkeyConfig(newConfig)
+                    }
+                )
 
                 Picker("Mode", selection: Binding(
                     get: { appState.hotkeyConfig.mode },

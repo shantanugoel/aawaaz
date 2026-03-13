@@ -33,6 +33,15 @@
 		AA000036 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100036 /* AppDelegate.swift */; };
 		AA000040 /* AccessibilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* AccessibilityManager.swift */; };
 		AA000041 /* KeystrokeSimulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* KeystrokeSimulator.swift */; };
+		AA000042 /* TextInsertionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100042 /* TextInsertionManager.swift */; };
+		AA000043 /* InsertionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100043 /* InsertionContext.swift */; };
+		AA000044 /* ShortcutRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100044 /* ShortcutRecorderView.swift */; };
+		AAT00001 /* VADStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10001 /* VADStateTests.swift */; };
+		AAT00002 /* HotkeyConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10002 /* HotkeyConfigurationTests.swift */; };
+		AAT00003 /* HotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10003 /* HotkeyManagerTests.swift */; };
+		AAT00004 /* InsertionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10004 /* InsertionContextTests.swift */; };
+		AAT00005 /* TextInsertionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10005 /* TextInsertionManagerTests.swift */; };
+		AAT00006 /* ModelPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10006 /* ModelPersistenceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +73,16 @@
 		AA100036 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AA100040 /* AccessibilityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityManager.swift; sourceTree = "<group>"; };
 		AA100041 /* KeystrokeSimulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeystrokeSimulator.swift; sourceTree = "<group>"; };
+		AA100042 /* TextInsertionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionManager.swift; sourceTree = "<group>"; };
+		AA100043 /* InsertionContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertionContext.swift; sourceTree = "<group>"; };
+		AA100044 /* ShortcutRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecorderView.swift; sourceTree = "<group>"; };
+		AAT10001 /* VADStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADStateTests.swift; sourceTree = "<group>"; };
+		AAT10002 /* HotkeyConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfigurationTests.swift; sourceTree = "<group>"; };
+		AAT10003 /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
+		AAT10004 /* InsertionContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertionContextTests.swift; sourceTree = "<group>"; };
+		AAT10005 /* TextInsertionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionManagerTests.swift; sourceTree = "<group>"; };
+		AAT10006 /* ModelPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPersistenceTests.swift; sourceTree = "<group>"; };
+		AAT10100 /* AawaazTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AawaazTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,6 +95,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AAT20001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -84,6 +110,7 @@
 			children = (
 				AA300001 /* Aawaaz */,
 				AA300005 /* Resources */,
+				AA300013 /* Tests */,
 				AA300010 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -126,6 +153,7 @@
 				AA100030 /* OverlayView.swift */,
 				AA100031 /* OverlayWindowController.swift */,
 				AA100035 /* OnboardingView.swift */,
+				AA100044 /* ShortcutRecorderView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -188,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100008 /* Aawaaz.app */,
+				AAT10100 /* AawaazTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -205,8 +234,23 @@
 			children = (
 				AA100040 /* AccessibilityManager.swift */,
 				AA100041 /* KeystrokeSimulator.swift */,
+				AA100042 /* TextInsertionManager.swift */,
+				AA100043 /* InsertionContext.swift */,
 			);
 			path = TextInsertion;
+			sourceTree = "<group>";
+		};
+		AA300013 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				AAT10001 /* VADStateTests.swift */,
+				AAT10002 /* HotkeyConfigurationTests.swift */,
+				AAT10003 /* HotkeyManagerTests.swift */,
+				AAT10004 /* InsertionContextTests.swift */,
+				AAT10005 /* TextInsertionManagerTests.swift */,
+				AAT10006 /* ModelPersistenceTests.swift */,
+			);
+			path = Tests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -233,7 +277,42 @@
 			productReference = AA100008 /* Aawaaz.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AAT40010 /* AawaazTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAT60001 /* Build configuration list for PBXNativeTarget "AawaazTests" */;
+			buildPhases = (
+				AAT50001 /* Sources */,
+				AAT20001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AAT40001 /* PBXTargetDependency */,
+			);
+			name = AawaazTests;
+			productName = AawaazTests;
+			productReference = AAT10100 /* AawaazTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		AAT30001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA800001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA400001;
+			remoteInfo = Aawaaz;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		AAT40001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA400001 /* Aawaaz */;
+			targetProxy = AAT30001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		AA800001 /* Project object */ = {
@@ -245,6 +324,10 @@
 				TargetAttributes = {
 					AA400001 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					AAT40010 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = AA400001;
 					};
 				};
 			};
@@ -266,6 +349,7 @@
 			projectRoot = "";
 			targets = (
 				AA400001 /* Aawaaz */,
+				AAT40010 /* AawaazTests */,
 			);
 		};
 /* End PBXProject section */
@@ -309,6 +393,22 @@
 				AA000036 /* AppDelegate.swift in Sources */,
 				AA000040 /* AccessibilityManager.swift in Sources */,
 				AA000041 /* KeystrokeSimulator.swift in Sources */,
+				AA000042 /* TextInsertionManager.swift in Sources */,
+				AA000043 /* InsertionContext.swift in Sources */,
+				AA000044 /* ShortcutRecorderView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAT50001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAT00001 /* VADStateTests.swift in Sources */,
+				AAT00002 /* HotkeyConfigurationTests.swift in Sources */,
+				AAT00003 /* HotkeyManagerTests.swift in Sources */,
+				AAT00004 /* InsertionContextTests.swift in Sources */,
+				AAT00005 /* TextInsertionManagerTests.swift in Sources */,
+				AAT00006 /* ModelPersistenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -491,6 +591,40 @@
 			};
 			name = Release;
 		};
+		AAT70001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.shantanugoel.AawaazTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aawaaz.app/Contents/MacOS/Aawaaz";
+			};
+			name = Debug;
+		};
+		AAT70002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.shantanugoel.AawaazTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aawaaz.app/Contents/MacOS/Aawaaz";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -499,6 +633,15 @@
 			buildConfigurations = (
 				AA700003 /* Debug */,
 				AA700004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAT60001 /* Build configuration list for PBXNativeTarget "AawaazTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAT70001 /* Debug */,
+				AAT70002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

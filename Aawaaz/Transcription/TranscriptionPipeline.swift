@@ -19,17 +19,19 @@ enum PipelineError: Error, LocalizedError {
 
 // MARK: - TranscriptionPipeline
 
-/// Orchestrates the full transcription pipeline: AudioCapture → VAD → Whisper → clipboard.
+/// Orchestrates the full transcription pipeline: AudioCapture → VAD → Whisper → text insertion.
 ///
 /// Create one instance per app lifetime. Call ``startListening()`` to begin capturing and
 /// transcribing, and ``stopListening()`` to stop. Transcription results are published to
-/// the provided ``AppState`` and automatically copied to the system clipboard.
+/// the provided ``AppState`` and inserted into the focused text field via
+/// ``TextInsertionManager``.
 final class TranscriptionPipeline {
 
     // MARK: - Components
 
     private let audioCapture = AudioCaptureManager()
     private let whisperManager = WhisperManager()
+    private let textInsertionManager = TextInsertionManager()
     private var vadProcessor: VADProcessor?
     private var vadState: VADState?
 
@@ -152,7 +154,7 @@ final class TranscriptionPipeline {
     // MARK: - Private
 
     /// Process a completed speech segment: run Whisper inference, update AppState,
-    /// and copy the result to the clipboard.
+    /// and insert the result into the focused text field (or fall back to clipboard).
     @MainActor
     private func processSpeechSegment(_ samples: [Float]) async {
         guard let appState else { return }
@@ -178,12 +180,16 @@ final class TranscriptionPipeline {
             }
 
             appState.currentTranscription = text
-            copyToClipboard(text)
+
+            // Insert text into the focused app (AX → keystroke → clipboard cascade)
+            let context = await textInsertionManager.insertText(text)
+
+            let methodLabel = context.insertionMethod.rawValue
             appState.showOverlayResult(text)
 
             let audioDuration = Double(samples.count) / 16_000.0
             print("[Pipeline] Transcribed \(String(format: "%.1f", audioDuration))s audio "
-                  + "in \(String(format: "%.2f", elapsed))s: \(text)")
+                  + "in \(String(format: "%.2f", elapsed))s via \(methodLabel): \(text)")
 
         } catch {
             print("[Pipeline] Transcription error: \(error.localizedDescription)")
@@ -191,11 +197,5 @@ final class TranscriptionPipeline {
         }
 
         appState.status = isListening ? .listening : .idle
-    }
-
-    /// Copy text to the system clipboard.
-    private func copyToClipboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
     }
 }
