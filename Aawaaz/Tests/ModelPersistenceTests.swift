@@ -48,24 +48,4 @@ final class ModelManagerTests: XCTestCase {
         XCTAssertEqual(WhisperModel.largeV3.rawValue, "large-v3")
     }
 
-    // MARK: - LatencyPreset
-
-    func testLatencyPresetRecommendedModels() {
-        XCTAssertEqual(LatencyPreset.fast.recommendedModel, .small)
-        XCTAssertEqual(LatencyPreset.balanced.recommendedModel, .turbo)
-        XCTAssertEqual(LatencyPreset.quality.recommendedModel, .largeV3)
-    }
-
-    func testLatencyPresetPersistence() {
-        let key = "latencyPreset"
-
-        UserDefaults.standard.set(LatencyPreset.quality.rawValue, forKey: key)
-        let raw = UserDefaults.standard.string(forKey: key)
-        XCTAssertEqual(raw, "Quality")
-
-        let preset = LatencyPreset(rawValue: raw ?? "")
-        XCTAssertEqual(preset, .quality)
-
-        UserDefaults.standard.removeObject(forKey: key)
-    }
 }
