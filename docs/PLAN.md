@@ -155,11 +155,11 @@ aawaaz/
 
 #### Step 1.3: Audio Capture
 
-- [ ] `AudioCaptureManager.swift` — AVAudioEngine with installTap on input node
-- [ ] Configure: 16kHz sample rate, mono, Float32 PCM format
-- [ ] Provide audio buffer callback (deliver `[Float]` samples)
-- [ ] Handle audio session setup and microphone permission request
-- [ ] `AudioDevice.swift` — List available input devices, handle device changes
+- [x] `AudioCaptureManager.swift` — AVAudioEngine with installTap on input node
+- [x] Configure: 16kHz sample rate, mono, Float32 PCM format
+- [x] Provide audio buffer callback (deliver `[Float]` samples)
+- [x] Handle audio session setup and microphone permission request
+- [x] `AudioDevice.swift` — List available input devices, handle device changes
 
 #### Step 1.4: Voice Activity Detection
 

@@ -12,6 +12,8 @@
 		AA000003 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003; };
 		AA000004 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004; };
 		AA000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100005; };
+		AA000010 /* AudioCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010; };
+		AA000011 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +26,8 @@
 		AA100007 /* Aawaaz.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Aawaaz.entitlements; sourceTree = "<group>"; };
 		AA100008 /* Aawaaz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aawaaz.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA100009 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		AA100010 /* AudioCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureManager.swift; sourceTree = "<group>"; };
+		AA100011 /* AudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDevice.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +58,7 @@
 				AA100009 /* Package.swift */,
 				AA300002 /* App */,
 				AA300003 /* Views */,
+				AA300004 /* Audio */,
 			);
 			name = Aawaaz;
 			sourceTree = "<group>";
@@ -74,6 +79,15 @@
 				AA100004 /* SettingsView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		AA300004 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				AA100010 /* AudioCaptureManager.swift */,
+				AA100011 /* AudioDevice.swift */,
+			);
+			path = Audio;
 			sourceTree = "<group>";
 		};
 		AA300005 /* Resources */ = {
@@ -166,6 +180,8 @@
 				AA000002 /* AppState.swift in Sources */,
 				AA000003 /* MenuBarView.swift in Sources */,
 				AA000004 /* SettingsView.swift in Sources */,
+				AA000010 /* AudioCaptureManager.swift in Sources */,
+				AA000011 /* AudioDevice.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

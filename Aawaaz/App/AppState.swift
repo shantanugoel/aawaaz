@@ -54,7 +54,36 @@ final class AppState {
     var selectedModel: WhisperModel = .turbo
     var selectedLanguage: LanguageMode = .auto
 
+    // Audio device state
+    var availableAudioDevices: [AudioDevice] = []
+    var selectedAudioDeviceUID: String? // nil = system default
+
+    @ObservationIgnored
+    private var deviceObserver: AudioDeviceObserver?
+
     var menuBarIconName: String {
         status.iconName
+    }
+
+    var selectedAudioDevice: AudioDevice? {
+        if let uid = selectedAudioDeviceUID {
+            return availableAudioDevices.first { $0.uid == uid }
+        }
+        return AudioDevice.defaultInputDevice()
+    }
+
+    init() {
+        refreshAudioDevices()
+        deviceObserver = AudioDeviceObserver { [weak self] in
+            self?.refreshAudioDevices()
+        }
+    }
+
+    func refreshAudioDevices() {
+        availableAudioDevices = AudioDevice.allInputDevices()
+        if let uid = selectedAudioDeviceUID,
+           !availableAudioDevices.contains(where: { $0.uid == uid }) {
+            selectedAudioDeviceUID = nil
+        }
     }
 }
