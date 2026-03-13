@@ -31,6 +31,8 @@
 		AA000034 /* PermissionsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100034 /* PermissionsManager.swift */; };
 		AA000035 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100035 /* OnboardingView.swift */; };
 		AA000036 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100036 /* AppDelegate.swift */; };
+		AA000040 /* AccessibilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* AccessibilityManager.swift */; };
+		AA000041 /* KeystrokeSimulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100041 /* KeystrokeSimulator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +62,8 @@
 		AA100034 /* PermissionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsManager.swift; sourceTree = "<group>"; };
 		AA100035 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		AA100036 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		AA100040 /* AccessibilityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityManager.swift; sourceTree = "<group>"; };
+		AA100041 /* KeystrokeSimulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeystrokeSimulator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +102,7 @@
 				AA300008 /* Transcription */,
 				AA300009 /* Hotkey */,
 				AA300011 /* Permissions */,
+				AA300012 /* TextInsertion */,
 			);
 			name = Aawaaz;
 			sourceTree = "<group>";
@@ -193,6 +198,15 @@
 				AA100034 /* PermissionsManager.swift */,
 			);
 			path = Permissions;
+			sourceTree = "<group>";
+		};
+		AA300012 /* TextInsertion */ = {
+			isa = PBXGroup;
+			children = (
+				AA100040 /* AccessibilityManager.swift */,
+				AA100041 /* KeystrokeSimulator.swift */,
+			);
+			path = TextInsertion;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -293,6 +307,8 @@
 				AA000034 /* PermissionsManager.swift in Sources */,
 				AA000035 /* OnboardingView.swift in Sources */,
 				AA000036 /* AppDelegate.swift in Sources */,
+				AA000040 /* AccessibilityManager.swift in Sources */,
+				AA000041 /* KeystrokeSimulator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

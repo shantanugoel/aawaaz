@@ -242,25 +242,25 @@ aawaaz/
 
 #### Step 2.3: AX API Text Insertion
 
-- [ ] Build a compatibility matrix across representative targets: AppKit text fields, AppKit text views, SwiftUI text inputs, Electron apps, browsers/contenteditable, Terminal/code editors
-- [ ] Evaluate insertion strategies before locking one in: direct AX value mutation, selected-text replacement, keystroke simulation, paste-based fallback
-- [ ] `AccessibilityManager.swift`:
-  - [ ] Get frontmost app PID via `NSWorkspace.shared.frontmostApplication`
-  - [ ] Create AX element: `AXUIElementCreateApplication(pid)`
-  - [ ] Get focused element: query `kAXFocusedUIElementAttribute`
-  - [ ] Verify the focused element is actually editable/settable; do not assume `AXTextField`/`AXTextArea` coverage is sufficient for all supported apps
-  - [ ] Get current value and selection range where available
-  - [ ] Prefer the least-destructive insertion strategy that works for the current app/element; do not assume whole-value `kAXValueAttribute` replacement is universally correct
-  - [ ] Update cursor position to end of inserted text
+- [x] Build a compatibility matrix across representative targets: AppKit text fields, AppKit text views, SwiftUI text inputs, Electron apps, browsers/contenteditable, Terminal/code editors
+- [x] Evaluate insertion strategies before locking one in: direct AX value mutation, selected-text replacement, keystroke simulation, paste-based fallback
+- [x] `AccessibilityManager.swift`:
+  - [x] Get frontmost app PID via `NSWorkspace.shared.frontmostApplication`
+  - [x] Create AX element: `AXUIElementCreateApplication(pid)`
+  - [x] Get focused element: query `kAXFocusedUIElementAttribute`
+  - [x] Verify the focused element is actually editable/settable; do not assume `AXTextField`/`AXTextArea` coverage is sufficient for all supported apps
+  - [x] Get current value and selection range where available
+  - [x] Prefer the least-destructive insertion strategy that works for the current app/element; do not assume whole-value `kAXValueAttribute` replacement is universally correct
+  - [x] Update cursor position to end of inserted text
 
 #### Step 2.4: Fallback: Keystroke Simulation
 
-- [ ] `KeystrokeSimulator.swift`:
-  - [ ] Save current clipboard contents
-  - [ ] Copy transcription to clipboard
-  - [ ] Simulate Cmd+V via `CGEventPost`
-  - [ ] Restore original clipboard contents
-  - [ ] Add small delay between clipboard set and paste simulation (~50ms)
+- [x] `KeystrokeSimulator.swift`:
+  - [x] Save current clipboard contents
+  - [x] Copy transcription to clipboard
+  - [x] Simulate Cmd+V via `CGEventPost`
+  - [x] Restore original clipboard contents
+  - [x] Add small delay between clipboard set and paste simulation (~50ms)
 
 #### Step 2.5: Insertion Orchestration
 

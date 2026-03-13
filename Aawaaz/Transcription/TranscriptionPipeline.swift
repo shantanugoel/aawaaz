@@ -87,6 +87,8 @@ final class TranscriptionPipeline {
         // Wire: speech segment → Whisper transcription
         state.onSpeechSegment = { [weak self] samples in
             guard self != nil else { return }
+            let durationMs = Int(Double(samples.count) / 16.0)
+            print("[Pipeline] Speech segment detected: \(durationMs)ms of audio")
             Task { @MainActor [weak self] in
                 await self?.processSpeechSegment(samples)
             }
@@ -101,8 +103,13 @@ final class TranscriptionPipeline {
         self.vadState = state
 
         // Wire: audio samples → VAD (dispatched to serial queue for thread safety)
+        var sampleCount = 0
         audioCapture.onSamplesReceived = { [weak self] samples in
             guard let self else { return }
+            sampleCount += samples.count
+            if sampleCount % 160_000 == 0 { // Log roughly every 10s of audio
+                print("[Pipeline] Audio flowing: \(sampleCount) samples received so far")
+            }
             let vadQueue = self.vadQueue
             let vadProcessor = self.vadProcessor
             vadQueue.async {
