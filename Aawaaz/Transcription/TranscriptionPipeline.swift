@@ -110,8 +110,9 @@ final class TranscriptionPipeline {
             }
         }
 
-        // Start audio capture
-        try audioCapture.startCapture()
+        // Start audio capture with the user's selected device
+        let deviceUID = appState?.selectedAudioDeviceUID
+        try audioCapture.startCapture(deviceUID: deviceUID)
 
         await MainActor.run { [weak self] in
             self?.appState?.status = .listening

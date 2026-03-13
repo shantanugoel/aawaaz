@@ -227,18 +227,18 @@ aawaaz/
 
 #### Step 2.1: Permissions & Onboarding
 
-- [ ] Add Accessibility description to Info.plist
-- [ ] `PermissionsManager.swift` — Check `AXIsProcessTrusted()`, guide user to enable
-- [ ] Update `OnboardingView` to include an explicit Accessibility permission step with screenshot/instructions
-- [ ] Align onboarding copy and checks so the UI consistently refers to Accessibility vs. Input Monitoring where appropriate; do not claim one permission while validating another
-- [ ] Gate onboarding completion on the permissions Phase 2 actually depends on instead of allowing "Get Started" to bypass them permanently
-- [ ] Show persistent warning in menu bar if Accessibility is not granted
+- [x] Add Accessibility description to Info.plist
+- [x] `PermissionsManager.swift` — Check `AXIsProcessTrusted()`, guide user to enable
+- [x] Update `OnboardingView` to include an explicit Accessibility permission step with screenshot/instructions
+- [x] Align onboarding copy and checks so the UI consistently refers to Accessibility vs. Input Monitoring where appropriate; do not claim one permission while validating another
+- [x] Gate onboarding completion on the permissions Phase 2 actually depends on instead of allowing "Get Started" to bypass them permanently
+- [x] Show persistent warning in menu bar if Accessibility is not granted
 
 #### Step 2.2: Input & Activation Reliability
 
-- [ ] `AudioCaptureManager.swift` — Wire the selected input device UID from settings into the actual `AVAudioEngine` capture path instead of always using the system default input
-- [ ] `HotkeyManager.swift` — Replace the observer-only hotkey implementation with a suppressible mechanism (`RegisterEventHotKey`, event tap, or other validated approach) so the activation shortcut does not leak through to the frontmost app
-- [ ] Re-test hold and toggle activation after the hotkey change, including conflicts with common text-entry apps
+- [x] `AudioCaptureManager.swift` — Wire the selected input device UID from settings into the actual `AVAudioEngine` capture path instead of always using the system default input
+- [x] `HotkeyManager.swift` — Replace the observer-only hotkey implementation with a suppressible mechanism (`RegisterEventHotKey`, event tap, or other validated approach) so the activation shortcut does not leak through to the frontmost app
+- [x] Re-test hold and toggle activation after the hotkey change, including conflicts with common text-entry apps
 
 #### Step 2.3: AX API Text Insertion
 

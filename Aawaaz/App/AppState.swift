@@ -99,7 +99,15 @@ final class AppState {
 
     // Audio device state
     var availableAudioDevices: [AudioDevice] = []
-    var selectedAudioDeviceUID: String? // nil = system default
+    var selectedAudioDeviceUID: String? {
+        didSet {
+            if let uid = selectedAudioDeviceUID {
+                UserDefaults.standard.set(uid, forKey: "selectedAudioDeviceUID")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "selectedAudioDeviceUID")
+            }
+        }
+    }
 
     @ObservationIgnored
     private var deviceObserver: AudioDeviceObserver?
@@ -112,6 +120,10 @@ final class AppState {
     @ObservationIgnored
     let hotkeyManager = HotkeyManager()
     var hotkeyConfig: HotkeyConfiguration = .load()
+
+    // Accessibility polling — retry event tap once permission is granted at runtime.
+    @ObservationIgnored
+    private var accessibilityTimer: Timer?
 
     // Onboarding
     var showOnboarding: Bool = PermissionsManager.shouldShowOnboarding
@@ -148,6 +160,9 @@ final class AppState {
             self.latencyPreset = .balanced
         }
 
+        // Restore persisted audio device selection before refreshing so
+        // refreshAudioDevices() can clear a stale UID for a disconnected device.
+        self.selectedAudioDeviceUID = UserDefaults.standard.string(forKey: "selectedAudioDeviceUID")
         refreshAudioDevices()
         deviceObserver = AudioDeviceObserver { [weak self] in
             self?.refreshAudioDevices()
@@ -204,6 +219,21 @@ final class AppState {
             }
         }
         hotkeyManager.startMonitoring()
+
+        // If the event tap couldn't be installed (Accessibility not yet granted),
+        // poll periodically and upgrade once permission appears.
+        if !hotkeyManager.isEventTapActive {
+            accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
+                guard let self else { timer.invalidate(); return }
+                if PermissionsManager.isAccessibilityGranted {
+                    self.hotkeyManager.upgradeToEventTapIfPossible()
+                    if self.hotkeyManager.isEventTapActive {
+                        timer.invalidate()
+                        self.accessibilityTimer = nil
+                    }
+                }
+            }
+        }
     }
 
     /// Update the hotkey configuration.

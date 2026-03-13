@@ -3,7 +3,7 @@ import SwiftUI
 /// First-launch onboarding flow that guides the user through:
 /// 1. Welcome screen
 /// 2. Microphone permission
-/// 3. Accessibility permission (for global hotkey)
+/// 3. Accessibility permission (for hotkey suppression + text insertion)
 /// 4. Model download
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
@@ -48,6 +48,7 @@ struct OnboardingView: View {
         .frame(width: 520, height: 480)
         .onReceive(accessibilityTimer) { _ in
             accessibilityGranted = PermissionsManager.isAccessibilityGranted
+            micPermissionGranted = PermissionsManager.isMicrophoneGranted
         }
     }
 
@@ -166,21 +167,29 @@ struct OnboardingView: View {
     // MARK: - Accessibility Step
 
     private var accessibilityStep: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Spacer()
 
-            Image(systemName: accessibilityGranted ? "keyboard.fill" : "keyboard")
+            Image(systemName: accessibilityGranted ? "checkmark.shield.fill" : "shield.lefthalf.filled")
                 .font(.system(size: 48))
                 .foregroundStyle(accessibilityGranted ? .green : .orange)
 
-            Text("Accessibility")
+            Text("Accessibility Permission")
                 .font(.title2.bold())
 
-            Text("Aawaaz needs Accessibility permission to detect your global hotkey shortcut, even when other apps are focused.")
+            Text("Aawaaz needs Accessibility permission for two things:")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 360)
+                .frame(maxWidth: 380)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Capture the hotkey without it leaking into other apps", systemImage: "keyboard")
+                    .font(.callout)
+                Label("Insert transcribed text directly into any text field", systemImage: "text.cursor")
+                    .font(.callout)
+            }
+            .padding(.horizontal, 24)
 
             if accessibilityGranted {
                 Label("Accessibility granted", systemImage: "checkmark.circle.fill")
@@ -188,22 +197,28 @@ struct OnboardingView: View {
                     .font(.headline)
             } else {
                 VStack(spacing: 12) {
-                    Button("Grant Access") {
+                    Button("Open Accessibility Settings") {
                         PermissionsManager.promptAccessibility()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
 
-                    Text("Add Aawaaz in System Settings → Privacy & Security → Accessibility")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("How to enable:")
+                            .font(.caption.bold())
+                        instructionRow(number: "1", text: "Click the button above to open System Settings")
+                        instructionRow(number: "2", text: "Find Aawaaz in the app list")
+                        instructionRow(number: "3", text: "Toggle the switch next to Aawaaz to ON")
+                        instructionRow(number: "4", text: "If prompted, enter your password to confirm")
+                    }
+                    .padding(12)
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 }
             }
 
             Spacer()
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, 32)
     }
 
     // MARK: - Model Step
@@ -254,13 +269,21 @@ struct OnboardingView: View {
             Spacer()
 
             if currentStep == .model {
-                Button("Get Started") {
-                    PermissionsManager.hasCompletedOnboarding = true
-                    appState.showOnboarding = false
-                    dismiss()
+                VStack(alignment: .trailing, spacing: 4) {
+                    Button("Get Started") {
+                        PermissionsManager.hasCompletedOnboarding = true
+                        appState.showOnboarding = false
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canFinishOnboarding)
+
+                    if !canFinishOnboarding && hasDownloadedModel {
+                        Text(missingPermissionsHint)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!hasDownloadedModel)
             } else {
                 Button("Continue") {
                     withAnimation { currentStep = currentStep.next }
@@ -272,8 +295,22 @@ struct OnboardingView: View {
 
     // MARK: - Helpers
 
+    /// All requirements must be met to finish onboarding:
+    /// microphone granted, accessibility granted, and at least one model downloaded.
+    private var canFinishOnboarding: Bool {
+        micPermissionGranted && accessibilityGranted && hasDownloadedModel
+    }
+
     private var hasDownloadedModel: Bool {
         !appState.modelManager.downloadedModels.isEmpty
+    }
+
+    /// Short hint shown when "Get Started" is blocked by missing permissions.
+    private var missingPermissionsHint: String {
+        var missing: [String] = []
+        if !micPermissionGranted { missing.append("Microphone") }
+        if !accessibilityGranted { missing.append("Accessibility") }
+        return "Grant \(missing.joined(separator: " & ")) permission first"
     }
 
     private func featureRow(icon: String, text: String) -> some View {
@@ -283,6 +320,18 @@ struct OnboardingView: View {
                 .foregroundStyle(.blue)
             Text(text)
                 .font(.body)
+        }
+    }
+
+    private func instructionRow(number: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(number + ".")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 14, alignment: .trailing)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

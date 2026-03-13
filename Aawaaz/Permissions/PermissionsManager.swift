@@ -3,8 +3,11 @@ import AppKit
 
 /// Centralized permission checking for the app.
 ///
-/// Handles microphone permission and accessibility (input monitoring) permission.
-/// Accessibility is required for global hotkey monitoring of key events.
+/// Handles microphone and Accessibility permissions.
+/// - **Microphone**: Required for audio capture / speech recognition.
+/// - **Accessibility**: Required for (1) suppressing the global hotkey so it
+///   does not leak into the frontmost app, and (2) inserting transcribed text
+///   into arbitrary applications via the AX API.
 final class PermissionsManager {
 
     // MARK: - Microphone
@@ -30,17 +33,18 @@ final class PermissionsManager {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
-    // MARK: - Accessibility (Input Monitoring)
+    // MARK: - Accessibility
 
-    /// Whether accessibility (input monitoring) access has been granted.
-    /// Required for global hotkey detection via NSEvent monitors.
+    /// Whether Accessibility access has been granted.
+    ///
+    /// This single permission covers both:
+    /// - Global hotkey suppression (CGEvent tap)
+    /// - Text insertion into other apps (AXUIElement)
     static var isAccessibilityGranted: Bool {
         AXIsProcessTrusted()
     }
 
-    /// Prompt the user to grant accessibility permission.
-    /// Opens System Settings directly to the Accessibility pane, which is more
-    /// reliable than AXIsProcessTrustedWithOptions for archived/installed apps.
+    /// Prompt the user to grant Accessibility permission by opening System Settings.
     static func promptAccessibility() {
         openAccessibilitySettings()
     }
@@ -50,6 +54,13 @@ final class PermissionsManager {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    // MARK: - Combined Checks
+
+    /// Whether all permissions required for full functionality are granted.
+    static var areRequiredPermissionsGranted: Bool {
+        isMicrophoneGranted && isAccessibilityGranted
     }
 
     // MARK: - First Launch

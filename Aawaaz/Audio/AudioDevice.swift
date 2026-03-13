@@ -55,6 +55,11 @@ struct AudioDevice: Identifiable, Hashable {
         return AudioDevice(id: deviceID, name: name, uid: uid)
     }
 
+    /// Look up the `AudioDeviceID` for a given device UID string.
+    static func deviceID(forUID uid: String) -> AudioDeviceID? {
+        allInputDevices().first { $0.uid == uid }?.id
+    }
+
     // MARK: - Private Helpers
 
     private static func hasInputChannels(deviceID: AudioDeviceID) -> Bool {

@@ -1,3 +1,4 @@
+import AudioToolbox
 import AVFoundation
 import CoreAudio
 
@@ -6,6 +7,7 @@ enum AudioCaptureError: Error, LocalizedError {
     case noInputDevice
     case converterCreationFailed
     case engineStartFailed(Error)
+    case deviceSelectionFailed
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +19,8 @@ enum AudioCaptureError: Error, LocalizedError {
             return "Failed to create audio format converter"
         case .engineStartFailed(let error):
             return "Failed to start audio engine: \(error.localizedDescription)"
+        case .deviceSelectionFailed:
+            return "Failed to select the requested audio input device"
         }
     }
 }
@@ -49,17 +53,26 @@ final class AudioCaptureManager {
 
     // MARK: - Capture Control
 
-    /// Starts audio capture using the system's default input device.
+    /// Starts audio capture, optionally targeting a specific input device.
+    ///
+    /// - Parameter deviceUID: The UID of the desired input device, or `nil`
+    ///   to use the system default input.
+    ///
     /// Delivers 16kHz mono Float32 samples via `onSamplesReceived`.
-    func startCapture() throws {
+    func startCapture(deviceUID: String? = nil) throws {
         guard !isCapturing else { return }
 
-        if engine == nil {
-            engine = AVAudioEngine()
-        }
-        guard let engine else { throw AudioCaptureError.noInputDevice }
+        // Always create a fresh engine so device changes take effect.
+        let newEngine = AVAudioEngine()
+        engine = newEngine
 
-        let inputNode = engine.inputNode
+        let inputNode = newEngine.inputNode
+
+        // Select the requested input device before reading format.
+        if let deviceUID {
+            try setInputDevice(deviceUID, on: inputNode)
+        }
+
         let hardwareFormat = inputNode.outputFormat(forBus: 0)
 
         guard hardwareFormat.channelCount > 0, hardwareFormat.sampleRate > 0 else {
@@ -85,10 +98,10 @@ final class AudioCaptureManager {
             self?.convertAndDeliver(buffer)
         }
 
-        engine.prepare()
+        newEngine.prepare()
 
         do {
-            try engine.start()
+            try newEngine.start()
             isCapturing = true
         } catch {
             inputNode.removeTap(onBus: 0)
@@ -102,7 +115,38 @@ final class AudioCaptureManager {
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
         converter = nil
+        engine = nil
         isCapturing = false
+    }
+
+    // MARK: - Device Selection
+
+    /// Set a specific input device on the AVAudioEngine input node's
+    /// underlying AudioUnit via `kAudioOutputUnitProperty_CurrentDevice`.
+    private func setInputDevice(_ uid: String, on inputNode: AVAudioInputNode) throws {
+        guard let deviceID = AudioDevice.deviceID(forUID: uid) else {
+            throw AudioCaptureError.deviceSelectionFailed
+        }
+
+        // AVAudioIONode.audioUnit is deprecated in macOS 14 but there is no
+        // public replacement for setting the HAL device on AVAudioEngine.
+        guard let audioUnit = inputNode.audioUnit else {
+            throw AudioCaptureError.deviceSelectionFailed
+        }
+
+        var id = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &id,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+
+        guard status == noErr else {
+            throw AudioCaptureError.deviceSelectionFailed
+        }
     }
 
     // MARK: - Private
