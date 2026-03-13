@@ -221,30 +221,26 @@ aawaaz/
 
 ---
 
-### Phase 1 — Known Issues (deferred to Phase 2)
-
-The following issues were identified during Phase 1 review and will be addressed alongside Phase 2 work:
-
-- [ ] **Global hotkey passthrough** — `NSEvent.addGlobalMonitorForEvents` can observe but not suppress events, so the ⌥Space shortcut also reaches the frontmost app. Fix requires `CGEvent` taps or alternative registration (`HotkeyManager.swift`)
-- [ ] **Audio device selection is a no-op** — Settings lets the user pick an input device (`SettingsView.swift`), and `AppState` stores the UID, but `AudioCaptureManager.startCapture()` always uses the system default input node. Wire the selected device UID to `AVAudioEngine`
-- [ ] **Permission flow inconsistency** — Onboarding says "Input Monitoring" but code checks Accessibility (`AXIsProcessTrusted`). "Get Started" only gates on model download, not permission grant, so users can permanently skip permissions the app depends on. Align terminology and enforce permission before completing onboarding
-- [ ] **No shortcut key editor in Settings** — Settings shows a read-only `displayString` and a mode picker, but nothing edits `keyCode`/`modifierFlags` despite full persistence support in `HotkeyConfiguration`. Add a key recorder UI
-- [ ] **No automated test target** — No test target in the Xcode project. Add test target covering VAD, Whisper, transcription pipeline, model selection, overlay teardown, and toggle-state management
-
----
-
 ### Phase 2: System-Wide Text Insertion
 
 **Goal**: Transcribed text is directly inserted into the focused text field of any application.
 
-#### Step 2.1: Accessibility Permission
+#### Step 2.1: Permissions & Onboarding
 
 - [ ] Add Accessibility description to Info.plist
 - [ ] `PermissionsManager.swift` — Check `AXIsProcessTrusted()`, guide user to enable
-- [ ] Update `OnboardingView` to include Accessibility permission step with screenshot/instructions
+- [ ] Update `OnboardingView` to include an explicit Accessibility permission step with screenshot/instructions
+- [ ] Align onboarding copy and checks so the UI consistently refers to Accessibility vs. Input Monitoring where appropriate; do not claim one permission while validating another
+- [ ] Gate onboarding completion on the permissions Phase 2 actually depends on instead of allowing "Get Started" to bypass them permanently
 - [ ] Show persistent warning in menu bar if Accessibility is not granted
 
-#### Step 2.2: AX API Text Insertion
+#### Step 2.2: Input & Activation Reliability
+
+- [ ] `AudioCaptureManager.swift` — Wire the selected input device UID from settings into the actual `AVAudioEngine` capture path instead of always using the system default input
+- [ ] `HotkeyManager.swift` — Replace the observer-only hotkey implementation with a suppressible mechanism (`RegisterEventHotKey`, event tap, or other validated approach) so the activation shortcut does not leak through to the frontmost app
+- [ ] Re-test hold and toggle activation after the hotkey change, including conflicts with common text-entry apps
+
+#### Step 2.3: AX API Text Insertion
 
 - [ ] Build a compatibility matrix across representative targets: AppKit text fields, AppKit text views, SwiftUI text inputs, Electron apps, browsers/contenteditable, Terminal/code editors
 - [ ] Evaluate insertion strategies before locking one in: direct AX value mutation, selected-text replacement, keystroke simulation, paste-based fallback
@@ -257,7 +253,7 @@ The following issues were identified during Phase 1 review and will be addressed
   - [ ] Prefer the least-destructive insertion strategy that works for the current app/element; do not assume whole-value `kAXValueAttribute` replacement is universally correct
   - [ ] Update cursor position to end of inserted text
 
-#### Step 2.3: Fallback: Keystroke Simulation
+#### Step 2.4: Fallback: Keystroke Simulation
 
 - [ ] `KeystrokeSimulator.swift`:
   - [ ] Save current clipboard contents
@@ -266,7 +262,7 @@ The following issues were identified during Phase 1 review and will be addressed
   - [ ] Restore original clipboard contents
   - [ ] Add small delay between clipboard set and paste simulation (~50ms)
 
-#### Step 2.4: Insertion Orchestration
+#### Step 2.5: Insertion Orchestration
 
 - [ ] `TextInsertionManager.swift`:
   - [ ] Try AX API insertion first
@@ -274,12 +270,18 @@ The following issues were identified during Phase 1 review and will be addressed
   - [ ] If keystroke simulation fails, fall back to clipboard-only with notification
   - [ ] Log which method was used (for debugging)
 
-#### Step 2.5: Context Detection
+#### Step 2.6: Context Detection
 
 - [ ] Detect the frontmost application name and bundle identifier
 - [ ] Detect the type of text field (single-line input, multi-line text area, code editor)
 - [ ] Pass this context to post-processing (Phase 3) for context-aware formatting
 - [ ] Store per-app preferences (e.g., always use keystroke simulation for app X)
+
+#### Step 2.7: Settings & Verification
+
+- [ ] `SettingsView.swift` — Add a real shortcut recorder UI for editing `HotkeyConfiguration.keyCode` and `modifierFlags`, not just displaying the current shortcut
+- [ ] Add an automated test target to the Xcode project
+- [ ] Cover core Phase 1/2 integration risks with tests: VAD state transitions, Whisper integration seams, transcription pipeline orchestration, selected-model/device persistence, overlay teardown, and hold/toggle hotkey state management
 
 **Phase 2 deliverable**: Transcription is automatically typed into whatever text field is focused, in any app.
 
