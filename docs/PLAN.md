@@ -221,6 +221,18 @@ aawaaz/
 
 ---
 
+### Phase 1 — Known Issues (deferred to Phase 2)
+
+The following issues were identified during Phase 1 review and will be addressed alongside Phase 2 work:
+
+- [ ] **Global hotkey passthrough** — `NSEvent.addGlobalMonitorForEvents` can observe but not suppress events, so the ⌥Space shortcut also reaches the frontmost app. Fix requires `CGEvent` taps or alternative registration (`HotkeyManager.swift`)
+- [ ] **Audio device selection is a no-op** — Settings lets the user pick an input device (`SettingsView.swift`), and `AppState` stores the UID, but `AudioCaptureManager.startCapture()` always uses the system default input node. Wire the selected device UID to `AVAudioEngine`
+- [ ] **Permission flow inconsistency** — Onboarding says "Input Monitoring" but code checks Accessibility (`AXIsProcessTrusted`). "Get Started" only gates on model download, not permission grant, so users can permanently skip permissions the app depends on. Align terminology and enforce permission before completing onboarding
+- [ ] **No shortcut key editor in Settings** — Settings shows a read-only `displayString` and a mode picker, but nothing edits `keyCode`/`modifierFlags` despite full persistence support in `HotkeyConfiguration`. Add a key recorder UI
+- [ ] **No automated test target** — No test target in the Xcode project. Add test target covering VAD, Whisper, transcription pipeline, model selection, overlay teardown, and toggle-state management
+
+---
+
 ### Phase 2: System-Wide Text Insertion
 
 **Goal**: Transcribed text is directly inserted into the focused text field of any application.

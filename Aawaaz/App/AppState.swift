@@ -78,7 +78,9 @@ final class AppState {
     var currentTranscription: String = ""
 
     var selectedModel: WhisperModel {
-        didSet { UserDefaults.standard.set(selectedModel.rawValue, forKey: "selectedModel") }
+        didSet {
+            UserDefaults.standard.set(selectedModel.rawValue, forKey: "selectedModel")
+        }
     }
     var selectedLanguage: LanguageMode {
         didSet { UserDefaults.standard.set(selectedLanguage.rawValue, forKey: "selectedLanguage") }
@@ -152,9 +154,11 @@ final class AppState {
         }
 
         // Ensure selected model is actually downloaded; fall back to first downloaded.
-        if !modelManager.isDownloaded(selectedModel),
-           let first = WhisperModel.allCases.first(where: { modelManager.isDownloaded($0) }) {
-            selectedModel = first
+        reconcileSelectedModel()
+
+        // Keep selectedModel in sync whenever models are downloaded or deleted.
+        modelManager.onModelsChanged = { [weak self] in
+            self?.reconcileSelectedModel()
         }
 
         setupHotkey()
@@ -163,6 +167,14 @@ final class AppState {
     /// Path to the currently selected model, or nil if not yet downloaded.
     var selectedModelPath: String? {
         modelManager.modelPath(for: selectedModel)
+    }
+
+    /// Ensure `selectedModel` points to a downloaded model; fall back to the first available.
+    func reconcileSelectedModel() {
+        if !modelManager.isDownloaded(selectedModel),
+           let first = WhisperModel.allCases.first(where: { modelManager.isDownloaded($0) }) {
+            selectedModel = first
+        }
     }
 
     func refreshAudioDevices() {
@@ -211,6 +223,7 @@ final class AppState {
                 self.pipelineError = error.localizedDescription
                 self.status = .idle
                 self.overlayController.dismiss()
+                self.hotkeyManager.resetState()
             }
         }
     }
@@ -219,16 +232,15 @@ final class AppState {
     func stopListening() {
         guard pipeline.isListening else { return }
         pipeline.stopListening()
+        hotkeyManager.resetState()
         // Don't dismiss the overlay here — the VAD flush may trigger a final
         // transcription that will show processing → result → auto-dismiss.
         // Schedule a fallback dismiss in case VAD flush produces nothing.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self else { return }
-            if self.status != .processing {
-                self.status = .idle
-                if self.overlayController.isVisible {
-                    self.overlayController.dismiss()
-                }
+            self.status = .idle
+            if self.overlayController.isVisible {
+                self.overlayController.dismiss()
             }
         }
     }

@@ -162,6 +162,7 @@ final class TranscriptionPipeline {
 
             guard !text.isEmpty else {
                 appState.status = isListening ? .listening : .idle
+                appState.overlayController.dismiss()
                 return
             }
 
@@ -175,6 +176,7 @@ final class TranscriptionPipeline {
 
         } catch {
             print("[Pipeline] Transcription error: \(error.localizedDescription)")
+            appState.overlayController.dismiss()
         }
 
         appState.status = isListening ? .listening : .idle
