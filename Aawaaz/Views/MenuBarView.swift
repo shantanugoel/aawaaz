@@ -100,9 +100,7 @@ struct MenuBarView: View {
             .disabled(appState.status == .processing)
 
             // Actions
-            Button {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            } label: {
+            SettingsLink {
                 Label("Settings…", systemImage: "gear")
             }
             .keyboardShortcut(",", modifiers: .command)
