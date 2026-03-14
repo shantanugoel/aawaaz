@@ -213,6 +213,17 @@ final class AppState {
         DispatchQueue.main.async { [weak self] in
             self?.setupHotkey()
         }
+
+        // Pre-load the LLM model in the background so it's ready for the
+        // first dictation. Uses low priority to avoid competing with UI setup.
+        // Force-initialize `pipeline` here (main thread) to avoid a lazy-var
+        // race with the detached task.
+        if postProcessingMode == .local {
+            let pipeline = self.pipeline
+            Task.detached(priority: .background) {
+                try? await pipeline.preloadLLMIfNeeded()
+            }
+        }
     }
 
     /// Path to the currently selected model, or nil if not yet downloaded.

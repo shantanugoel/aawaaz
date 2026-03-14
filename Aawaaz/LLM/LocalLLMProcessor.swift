@@ -62,10 +62,11 @@ actor LocalLLMProcessor: PostProcessor {
         let container = try await ensureModelLoaded()
         let systemPrompt = Self.buildSystemPrompt(for: context, cleanupLevel: cleanupLevel, scriptPreference: scriptPreference)
 
+        let params = Self.cleanupParameters(for: trimmed, cleanupLevel: cleanupLevel)
         let session = ChatSession(
             container,
             instructions: systemPrompt,
-            generateParameters: Self.cleanupParameters,
+            generateParameters: params,
             additionalContext: ["enable_thinking": false]
         )
 
@@ -160,6 +161,16 @@ actor LocalLLMProcessor: PostProcessor {
         guard model != selectedModel else { return }
         selectedModel = model
         unloadModel()
+        try await loadModel()
+    }
+
+    /// Ensure the specified model is selected and loaded, ready for inference.
+    ///
+    /// Unlike ``switchModel(to:)``, this is safe to call even when the model
+    /// is already the current selection — it will load it if not yet loaded.
+    /// Use this for preloading or before inference to guarantee readiness.
+    func prepare(model: LLMModel) async throws {
+        selectedModel = model
         try await loadModel()
     }
 
@@ -334,13 +345,25 @@ actor LocalLLMProcessor: PostProcessor {
     }
 
     /// Generation parameters tuned for deterministic text cleanup.
-    private static let cleanupParameters = GenerateParameters(
-        maxTokens: 1024,
-        temperature: 0.1,
-        topP: 0.9,
-        repetitionPenalty: 1.1,
-        repetitionContextSize: 64
-    )
+    ///
+    /// Token budget is sized to the input: ~2 tokens per word with headroom
+    /// for punctuation/grammar fixes. Capped to prevent runaway generation.
+    private static func cleanupParameters(for inputText: String, cleanupLevel: CleanupLevel) -> GenerateParameters {
+        let wordCount = inputText.split(whereSeparator: \.isWhitespace).count
+        // ~1.5 tokens per word, with headroom for punctuation/grammar
+        let headroom = cleanupLevel == .full ? 40 : 24
+        let estimatedTokens = max(wordCount * 2 + headroom, 50)
+        let maxCap = cleanupLevel == .full ? 384 : 256
+        let cappedMaxTokens = min(estimatedTokens, maxCap)
+
+        return GenerateParameters(
+            maxTokens: cappedMaxTokens,
+            temperature: 0.05,
+            topP: 0.9,
+            repetitionPenalty: 1.1,
+            repetitionContextSize: 64
+        )
+    }
 
     /// Strip `<think>…</think>` tags that Qwen 3 may produce in thinking mode.
     ///

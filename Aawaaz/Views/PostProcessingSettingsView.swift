@@ -105,13 +105,18 @@ private struct LLMModelRow: View {
             Button {
                 if isDownloaded {
                     appState.selectedLLMModel = info.model
+                    // Switch the loaded model immediately so the next
+                    // dictation uses it without a hot-path model swap.
+                    Task {
+                        try? await appState.pipeline.switchLLMModel(to: info.model)
+                    }
                 }
             } label: {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
             }
             .buttonStyle(.borderless)
-            .disabled(!isDownloaded)
+            .disabled(!isDownloaded || appState.pipeline.isBusy)
             .help(isDownloaded ? "Use this model" : "Download the model first")
 
             // Model metadata

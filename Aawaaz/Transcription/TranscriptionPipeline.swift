@@ -309,14 +309,6 @@ final class TranscriptionPipeline {
         // so context doesn't drift if the user switches apps during LLM loading.
         let insertionContext = InsertionContext.current() ?? .unknown
 
-        // Ensure the LLM processor uses the user's selected model (if downloaded).
-        // Non-critical — if switch fails, proceed with the currently loaded model.
-        if appState.postProcessingMode == .local,
-           appState.llmModelManager.isDownloaded(appState.selectedLLMModel) {
-            let selectedModel = appState.selectedLLMModel
-            try? await llmProcessor.switchModel(to: selectedModel)
-        }
-
         // Run the post-processing chain
         let processedText = await postProcess(rawText, context: insertionContext)
 
@@ -376,12 +368,36 @@ final class TranscriptionPipeline {
         finalizationTimeoutWork = nil
     }
 
-    // MARK: - Private — Post-Processing
+    // MARK: - LLM Model Management
 
     private let textProcessor = TextProcessor()
     private let llmProcessor = LocalLLMProcessor()
     private let noOpProcessor = NoOpProcessor()
     private let transliterator = DevanagariTransliterator()
+
+    /// Switch the LLM processor to a different model.
+    ///
+    /// Called from settings when the user selects a different model.
+    /// No-op if the requested model is already selected and loaded.
+    func switchLLMModel(to model: LLMModel) async throws {
+        try await llmProcessor.switchModel(to: model)
+    }
+
+    /// Pre-load the LLM model so it's ready for the first dictation.
+    ///
+    /// Called on app launch when local post-processing is enabled and
+    /// the selected model is downloaded. Eliminates the cold-start delay
+    /// on the first dictation. Uses ``LocalLLMProcessor/prepare(model:)``
+    /// to sync the actor's selected model with AppState.
+    func preloadLLMIfNeeded() async throws {
+        guard let appState,
+              appState.postProcessingMode == .local,
+              appState.llmModelManager.isDownloaded(appState.selectedLLMModel) else { return }
+        let model = appState.selectedLLMModel
+        try await llmProcessor.prepare(model: model)
+    }
+
+    // MARK: - Private — Post-Processing
 
     /// Run the post-processing chain on accumulated text.
     ///
