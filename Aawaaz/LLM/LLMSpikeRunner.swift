@@ -58,8 +58,7 @@ actor LLMSpikeRunner {
     static let defaultModelID = "mlx-community/Qwen3-0.6B-4bit"
 
     private static let systemPrompt = """
-        You are a text cleanup tool for dictated speech. /no_think
-        Your ONLY job:
+        You are a text cleanup tool for dictated speech. Your ONLY job:
         1. Fix grammar, punctuation, and capitalization
         2. Remove filler words (um, uh, like, you know, basically)
         3. Keep the speaker's intent and meaning exactly intact
@@ -114,7 +113,8 @@ actor LLMSpikeRunner {
         let coldSession = ChatSession(
             container,
             instructions: Self.systemPrompt,
-            generateParameters: Self.cleanupParameters
+            generateParameters: Self.cleanupParameters,
+            additionalContext: ["enable_thinking": false]
         )
 
         let coldStart = CFAbsoluteTimeGetCurrent()
@@ -136,7 +136,8 @@ actor LLMSpikeRunner {
         let warmSession = ChatSession(
             container,
             instructions: Self.systemPrompt,
-            generateParameters: Self.cleanupParameters
+            generateParameters: Self.cleanupParameters,
+            additionalContext: ["enable_thinking": false]
         )
 
         let warmStart = CFAbsoluteTimeGetCurrent()

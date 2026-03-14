@@ -508,12 +508,16 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [x] `LLMSpikeTests.swift` — opt-in XCTest harness (set `RUN_LLM_SPIKE=1` env var), validates timing, filler removal, thinking tag stripping, memory
   - [x] Thinking tag stripping (`<think>...</think>` + dangling tag handling) working
   - [x] System prompt tuned for text cleanup (no thinking, no commentary)
-  - [ ] **TODO:** Run spike with real model (requires `RUN_LLM_SPIKE=1`), evaluate results, decide go/no-go on MLX
-  - [ ] **TODO:** If spike passes, move MLX deps from app target to test-only (currently linked in main target for build validation)
-- [ ] Runtime decision:
-  - [ ] Primary path: **MLX Swift LM** for Apple-Silicon-only macOS builds (best native Swift integration, official Qwen MLX artifacts, no GGUF conversion requirement)
-  - [ ] Fallback path: **llama.cpp** if MLX blocks shipping because of packaging, model support, determinism, or benchmark regressions
-  - [ ] Make the final runtime choice after a short spike comparing: Swift/Xcode integration, cold start, steady-state latency, memory while Whisper is loaded, and output cleanliness for rewrite-only prompts
+  - [x] `enable_thinking: false` via `additionalContext` — reliably disables Qwen 3 thinking mode at template level (eliminates inconsistent 0.5s vs 5.5s inference)
+  - [x] Spike validated with real model — results:
+    - Model load: ~4.6s, Cold inference: ~0.5s, Warm inference: ~0.5s
+    - Memory: ~610 MB total after inference
+    - Output quality: fillers removed, grammar fixed, clean text
+    - **Go decision: MLX Swift LM is the primary runtime ✅**
+  - [ ] **TODO:** Move MLX deps from app target to test-only (currently linked in main target for build validation)
+- [x] Runtime decision: **MLX Swift LM** confirmed as primary runtime
+  - Apple-Silicon-native, official Qwen MLX artifacts, Swift-first API
+  - Fallback to llama.cpp only if MLX blocks shipping later
 - [ ] Add the chosen runtime as a Swift Package dependency
 - [ ] `LLMModelCatalog.swift` — Catalog of available LLM models and runtime-specific artifacts:
   | Model | Preferred Runtime | Artifact | Approx Size | RAM | Speed (M2+) | Quality |
