@@ -613,7 +613,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "code-term-4",
                 category: "code-terminal",
                 input: "the function getUserById takes an integer parameter and returns a user object",
-                expected: "The function getUserById takes an integer parameter and returns a user object.",
+                expected: "the function getUserById takes an integer parameter and returns a user object",
                 cleanupLevel: .medium,
                 context: code
             ),
@@ -621,7 +621,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "code-term-5",
                 category: "code-terminal",
                 input: "import Foundation and then add a struct called AppConfig",
-                expected: "Import Foundation and then add a struct called AppConfig.",
+                expected: "import Foundation and then add a struct called AppConfig",
                 cleanupLevel: .medium,
                 context: code
             ),
@@ -629,7 +629,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "code-term-6",
                 category: "code-terminal",
                 input: "check the dockerfile and make sure the base image is alpine three point eighteen",
-                expected: "Check the Dockerfile and make sure the base image is alpine three point eighteen.",
+                expected: "check the dockerfile and make sure the base image is alpine three point eighteen",
                 cleanupLevel: .medium,
                 context: code
             ),
