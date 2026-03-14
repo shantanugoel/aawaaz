@@ -37,12 +37,19 @@
 		AA000043 /* InsertionContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100043 /* InsertionContext.swift */; };
 		AA000044 /* ShortcutRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100044 /* ShortcutRecorderView.swift */; };
 		AA000045 /* OverlayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100045 /* OverlayState.swift */; };
+		AA000050 /* TextProcessingConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100050 /* TextProcessingConfig.swift */; };
+		AA000051 /* TextProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100051 /* TextProcessor.swift */; };
+		AA000052 /* FillerWordRemover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100052 /* FillerWordRemover.swift */; };
+		AA000053 /* SelfCorrectionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100053 /* SelfCorrectionDetector.swift */; };
 		AAT00001 /* VADStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10001 /* VADStateTests.swift */; };
 		AAT00002 /* HotkeyConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10002 /* HotkeyConfigurationTests.swift */; };
 		AAT00003 /* HotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10003 /* HotkeyManagerTests.swift */; };
 		AAT00004 /* InsertionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10004 /* InsertionContextTests.swift */; };
 		AAT00005 /* TextInsertionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10005 /* TextInsertionManagerTests.swift */; };
 		AAT00006 /* ModelPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10006 /* ModelPersistenceTests.swift */; };
+		AAT00007 /* FillerWordRemoverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10007 /* FillerWordRemoverTests.swift */; };
+		AAT00008 /* SelfCorrectionDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10008 /* SelfCorrectionDetectorTests.swift */; };
+		AAT00009 /* TextProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10009 /* TextProcessorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -78,12 +85,19 @@
 		AA100043 /* InsertionContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertionContext.swift; sourceTree = "<group>"; };
 		AA100044 /* ShortcutRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecorderView.swift; sourceTree = "<group>"; };
 		AA100045 /* OverlayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayState.swift; sourceTree = "<group>"; };
+		AA100050 /* TextProcessingConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextProcessingConfig.swift; sourceTree = "<group>"; };
+		AA100051 /* TextProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextProcessor.swift; sourceTree = "<group>"; };
+		AA100052 /* FillerWordRemover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordRemover.swift; sourceTree = "<group>"; };
+		AA100053 /* SelfCorrectionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCorrectionDetector.swift; sourceTree = "<group>"; };
 		AAT10001 /* VADStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADStateTests.swift; sourceTree = "<group>"; };
 		AAT10002 /* HotkeyConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfigurationTests.swift; sourceTree = "<group>"; };
 		AAT10003 /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
 		AAT10004 /* InsertionContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertionContextTests.swift; sourceTree = "<group>"; };
 		AAT10005 /* TextInsertionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionManagerTests.swift; sourceTree = "<group>"; };
 		AAT10006 /* ModelPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPersistenceTests.swift; sourceTree = "<group>"; };
+		AAT10007 /* FillerWordRemoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordRemoverTests.swift; sourceTree = "<group>"; };
+		AAT10008 /* SelfCorrectionDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCorrectionDetectorTests.swift; sourceTree = "<group>"; };
+		AAT10009 /* TextProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextProcessorTests.swift; sourceTree = "<group>"; };
 		AAT10100 /* AawaazTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AawaazTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -132,6 +146,7 @@
 				AA300009 /* Hotkey */,
 				AA300011 /* Permissions */,
 				AA300012 /* TextInsertion */,
+				AA300014 /* TextProcessing */,
 			);
 			name = Aawaaz;
 			sourceTree = "<group>";
@@ -252,8 +267,22 @@
 				AAT10004 /* InsertionContextTests.swift */,
 				AAT10005 /* TextInsertionManagerTests.swift */,
 				AAT10006 /* ModelPersistenceTests.swift */,
+				AAT10007 /* FillerWordRemoverTests.swift */,
+				AAT10008 /* SelfCorrectionDetectorTests.swift */,
+				AAT10009 /* TextProcessorTests.swift */,
 			);
 			path = Tests;
+			sourceTree = "<group>";
+		};
+		AA300014 /* TextProcessing */ = {
+			isa = PBXGroup;
+			children = (
+				AA100050 /* TextProcessingConfig.swift */,
+				AA100051 /* TextProcessor.swift */,
+				AA100052 /* FillerWordRemover.swift */,
+				AA100053 /* SelfCorrectionDetector.swift */,
+			);
+			path = TextProcessing;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -400,6 +429,10 @@
 				AA000043 /* InsertionContext.swift in Sources */,
 				AA000044 /* ShortcutRecorderView.swift in Sources */,
 				AA000045 /* OverlayState.swift in Sources */,
+				AA000050 /* TextProcessingConfig.swift in Sources */,
+				AA000051 /* TextProcessor.swift in Sources */,
+				AA000052 /* FillerWordRemover.swift in Sources */,
+				AA000053 /* SelfCorrectionDetector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,6 +446,9 @@
 				AAT00004 /* InsertionContextTests.swift in Sources */,
 				AAT00005 /* TextInsertionManagerTests.swift in Sources */,
 				AAT00006 /* ModelPersistenceTests.swift in Sources */,
+				AAT00007 /* FillerWordRemoverTests.swift in Sources */,
+				AAT00008 /* SelfCorrectionDetectorTests.swift in Sources */,
+				AAT00009 /* TextProcessorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

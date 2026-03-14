@@ -460,33 +460,34 @@ aawaaz/
 
 These steps run **after** Whisper and **before** LLM. They are fast, deterministic, and work even when LLM is disabled.
 
-- [ ] `TextProcessing/TextProcessor.swift` — Orchestrator that runs all pre-LLM text cleaning steps in sequence:
+- [x] `TextProcessing/TextProcessor.swift` — Orchestrator that runs all pre-LLM text cleaning steps in sequence:
   ```swift
   class TextProcessor {
       func process(_ rawText: String, config: TextProcessingConfig) -> String
   }
   ```
-- [ ] `TextProcessing/FillerWordRemover.swift`:
-  - [ ] Default word list: "um", "uh", "like", "you know", "basically", "so", "I mean", "right", "actually", "literally"
-  - [ ] Regex-based removal with word-boundary awareness (`\b` anchors) to avoid false positives (e.g., "I like dogs" keeps "like")
-  - [ ] Handle multi-word fillers ("you know", "I mean") as phrase patterns
-  - [ ] Configurable: users can add/remove filler words in Settings
-  - [ ] Clean up double spaces and leading/trailing whitespace after removal
-  - [ ] Unit tests: `FillerWordRemoverTests.swift` — test boundary cases, multi-word fillers, no false positives on legitimate usage
-- [ ] `TextProcessing/SelfCorrectionDetector.swift`:
-  - [ ] Detect correction patterns: "actually no [X]", "I mean [X]", "wait [X]", "sorry [X]", "no no [X]", "let me rephrase [X]", "scratch that [X]"
-  - [ ] Regex patterns: `\b(actually no|I mean|wait|sorry|no no|let me rephrase|scratch that)\b[,]?\s*` — keep only text after the marker
-  - [ ] Handle multiple corrections in a single utterance (scan left-to-right, keep rightmost correction per sentence)
+- [x] `TextProcessing/FillerWordRemover.swift`:
+  - [x] Default word list: "um", "uh", "erm", "hmm", "you know", "basically", "literally" (conservative defaults; "like", "so", "right" excluded due to false positive risk; "I mean", "actually" handled by self-correction)
+  - [x] Regex-based removal with word-boundary awareness (`\b` anchors) to avoid false positives (e.g., "I like dogs" keeps "like")
+  - [x] Handle multi-word fillers ("you know") as phrase patterns
+  - [x] Configurable: users can add/remove filler words in Settings
+  - [x] Clean up double spaces and leading/trailing whitespace after removal
+  - [x] Unit tests: `FillerWordRemoverTests.swift` — test boundary cases, multi-word fillers, no false positives on legitimate usage
+- [x] `TextProcessing/SelfCorrectionDetector.swift`:
+  - [x] Detect correction patterns: "actually no [X]", "I mean [X]", "wait [X]", "sorry [X]", "no no [X]", "let me rephrase [X]", "scratch that [X]"
+  - [x] Context-aware matching: "wait", "sorry", "I mean" require preceding punctuation (or trailing comma at sentence start) to avoid false positives ("Wait for me", "I mean business")
+  - [x] Handle multiple corrections in a single utterance (scan left-to-right, keep rightmost correction per sentence)
   - [ ] When LLM is enabled, can delegate to LLM prompt instead (add instruction: "If the speaker corrects themselves, keep only the correction")
-  - [ ] Unit tests: `SelfCorrectionDetectorTests.swift` — test each pattern, multiple corrections, edge cases
-- [ ] Wire `TextProcessor` into `TranscriptionPipeline.swift`:
-  - [ ] After `whisperManager.transcribe()` returns, run `textProcessor.process(rawText)` before passing to PostProcessor
-  - [ ] Add `TextProcessingConfig` to `AppState` with toggle for filler removal and self-correction detection
-- [ ] Settings integration:
-  - [ ] Add "Text Cleanup" section to General Settings tab
-  - [ ] Toggle: "Remove filler words" (default: on)
-  - [ ] Toggle: "Detect self-corrections" (default: on)
-  - [ ] Editable filler word list (advanced, expandable section)
+  - [x] Unit tests: `SelfCorrectionDetectorTests.swift` — test each pattern, multiple corrections, edge cases, false positive prevention
+- [x] Wire `TextProcessor` into `TranscriptionPipeline.swift`:
+  - [x] After `whisperManager.transcribe()` returns, run `textProcessor.process(rawText)` before passing to PostProcessor
+  - [x] Add `TextProcessingConfig` to `AppState` with toggle for filler removal and self-correction detection
+  - [x] **Pipeline order change**: Self-correction runs before filler removal (reversed from original plan) to prevent correction markers like "actually no" from being removed as fillers
+- [x] Settings integration:
+  - [x] Add "Text Cleanup" section to General Settings tab
+  - [x] Toggle: "Remove filler words" (default: on)
+  - [x] Toggle: "Detect self-corrections" (default: on)
+  - [x] Editable filler word list (advanced, expandable section)
 
 #### Step 3.2: Post-Processor Protocol
 

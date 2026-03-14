@@ -15,7 +15,7 @@ struct SettingsView: View {
                     Label("Models", systemImage: "cpu")
                 }
         }
-        .frame(width: 500, height: 420)
+        .frame(width: 500, height: 480)
     }
 }
 
@@ -93,8 +93,67 @@ struct GeneralSettingsView: View {
                     }
                 }
             }
+
+            TextCleanupSettingsSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+struct TextCleanupSettingsSection: View {
+    @Environment(AppState.self) private var appState
+    @State private var showFillerWords = false
+    @State private var newFillerWord = ""
+
+    var body: some View {
+        @Bindable var state = appState
+
+        Section("Text Cleanup") {
+            Toggle("Remove filler words", isOn: $state.textProcessingConfig.fillerRemovalEnabled)
+            Toggle("Detect self-corrections", isOn: $state.textProcessingConfig.selfCorrectionEnabled)
+
+            if appState.textProcessingConfig.fillerRemovalEnabled {
+                DisclosureGroup("Filler word list", isExpanded: $showFillerWords) {
+                    ForEach(appState.textProcessingConfig.fillerWords, id: \.self) { word in
+                        HStack {
+                            Text(word)
+                            Spacer()
+                            Button {
+                                appState.textProcessingConfig.fillerWords.removeAll { $0 == word }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    HStack {
+                        TextField("Add word or phrase…", text: $newFillerWord)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { addFillerWord() }
+                        Button("Add") { addFillerWord() }
+                            .disabled(newFillerWord.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+
+                    Button("Reset to Defaults") {
+                        appState.textProcessingConfig.fillerWords = TextProcessingConfig.defaultFillerWords
+                    }
+                    .font(.caption)
+                }
+            }
+        }
+    }
+
+    private func addFillerWord() {
+        let word = newFillerWord.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !word.isEmpty,
+              !appState.textProcessingConfig.fillerWords.contains(word) else {
+            newFillerWord = ""
+            return
+        }
+        appState.textProcessingConfig.fillerWords.append(word)
+        newFillerWord = ""
     }
 }
 

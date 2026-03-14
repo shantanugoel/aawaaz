@@ -358,15 +358,20 @@ final class TranscriptionPipeline {
 
     // MARK: - Private — Post-Processing
 
+    private let textProcessor = TextProcessor()
+
     /// Run the post-processing chain on accumulated text.
     ///
-    /// Currently a pass-through. Future steps will add:
-    /// 1. Dictionary correction (Phase 3.5)
+    /// Current chain:
+    /// 1. Self-correction detection (Step 3.1)
     /// 2. Filler word removal (Step 3.1)
-    /// 3. Self-correction detection (Step 3.1)
+    ///
+    /// Future steps will add:
+    /// 3. Dictionary correction (Phase 3.5)
     /// 4. Snippet expansion (Phase 3.5)
     /// 5. LLM cleanup (Steps 3.3–3.5)
     private func postProcess(_ text: String) async -> String {
-        return text
+        let config = appState?.textProcessingConfig ?? .default
+        return textProcessor.process(text, config: config)
     }
 }

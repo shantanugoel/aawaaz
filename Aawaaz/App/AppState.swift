@@ -108,6 +108,11 @@ final class AppState {
     @ObservationIgnored
     let overlayController = OverlayWindowController()
 
+    // Text processing
+    var textProcessingConfig: TextProcessingConfig = .load() {
+        didSet { textProcessingConfig.save() }
+    }
+
     // Hotkey
     @ObservationIgnored
     let hotkeyManager = HotkeyManager()
