@@ -45,3 +45,4 @@ All source lives under `Aawaaz/`. Key modules:
 - **Test**: Run tests via Xcode or `xcodebuild test`.
 - **After every change**: Build and run tests. Fix what you broke. Don't leave the project in a non-compiling state.
 - **Review your own work** — Re-read your changes, check for edge cases, and verify the UI behaves correctly before considering a task done.
+- Never commit changes yourself. Leave that to the developer to do it themselves.
