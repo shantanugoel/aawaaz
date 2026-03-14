@@ -47,6 +47,10 @@ actor LocalLLMProcessor: PostProcessor {
     /// The model to use for inference.
     private(set) var selectedModel: LLMModel
 
+    /// Override for testing: when set, `loadModel()` uses this HuggingFace ID
+    /// instead of looking up the selected model in the catalog.
+    var testOverrideModelID: String?
+
     // MARK: - Init
 
     init(selectedModel: LLMModel = LLMModelCatalog.defaultModel) {
@@ -91,7 +95,7 @@ actor LocalLLMProcessor: PostProcessor {
     /// for the same model, callers wait on the existing task.
     func loadModel() async throws {
         let modelInfo = LLMModelCatalog.info(for: selectedModel)
-        let targetID = modelInfo.huggingFaceID
+        let targetID = testOverrideModelID ?? modelInfo.huggingFaceID
 
         // Already loaded with the right model
         if loadedModelID == targetID, modelContainer != nil {
@@ -152,6 +156,14 @@ actor LocalLLMProcessor: PostProcessor {
         modelContainer = nil
         loadedModelID = nil
         modelState = .unloaded
+    }
+
+    /// Sets the test override model ID for loading arbitrary HuggingFace models.
+    func setTestOverride(_ huggingFaceID: String?) {
+        testOverrideModelID = huggingFaceID
+        if huggingFaceID != nil {
+            loadedModelID = nil
+        }
     }
 
     /// Switch to a different model, unloading the current one first.

@@ -1124,4 +1124,189 @@ final class CleanupQualityTests: XCTestCase {
     private func pad(_ string: String, _ width: Int) -> String {
         string.padding(toLength: width, withPad: " ", startingAt: 0)
     }
+
+    // MARK: - Multi-Model Comparison Test
+
+    /// Candidate model for comparison testing.
+    private struct CandidateModel {
+        let name: String
+        let huggingFaceID: String
+        let sizeLabel: String
+    }
+
+    /// Tests multiple small LLM models against the full quality benchmark.
+    ///
+    /// Enable with: `defaults write dev.shantanugoel.Aawaaz RUN_MODEL_COMPARISON -bool YES`
+    ///
+    /// Run from CLI:
+    /// ```
+    /// defaults write dev.shantanugoel.Aawaaz RUN_MODEL_COMPARISON -bool YES
+    /// cd Aawaaz && xcodebuild test -project Aawaaz.xcodeproj -scheme Aawaaz \
+    ///   -configuration Debug -only-testing:AawaazTests/CleanupQualityTests/testModelComparison
+    /// defaults delete dev.shantanugoel.Aawaaz RUN_MODEL_COMPARISON
+    /// ```
+    func testModelComparison() async throws {
+        let skipComparison: Bool = {
+            if ProcessInfo.processInfo.environment["RUN_MODEL_COMPARISON"] == "1" { return false }
+            if UserDefaults.standard.bool(forKey: "RUN_MODEL_COMPARISON") { return false }
+            return true
+        }()
+        try XCTSkipIf(skipComparison, "Set RUN_MODEL_COMPARISON=1 to run the multi-model comparison")
+
+        let candidates: [CandidateModel] = [
+            CandidateModel(name: "Qwen3-0.6B-6bit", huggingFaceID: "mlx-community/Qwen3-0.6B-6bit", sizeLabel: "~560MB"),
+            CandidateModel(name: "Qwen3-4B-3bit", huggingFaceID: "mlx-community/Qwen3-4B-3bit", sizeLabel: "~1.8GB"),
+        ]
+
+        let textProcessor = TextProcessor()
+        let config = TextProcessingConfig.default
+        let llmProcessor = LocalLLMProcessor()
+
+        struct ModelResult {
+            let name: String
+            let sizeLabel: String
+            let passed: Int
+            let total: Int
+            let avgLatency: TimeInterval
+            let loadTime: TimeInterval
+            let categoryResults: [(String, Int, Int, TimeInterval)] // (category, pass, total, avgLat)
+        }
+
+        var allModelResults: [ModelResult] = []
+
+        for candidate in candidates {
+            print("\n" + String(repeating: "═", count: 70))
+            print("  MODEL: \(candidate.name) (\(candidate.sizeLabel))")
+            print("  HF ID: \(candidate.huggingFaceID)")
+            print(String(repeating: "═", count: 70) + "\n")
+
+            // Configure processor to load this specific model
+            await llmProcessor.unloadModel()
+            await llmProcessor.setTestOverride(candidate.huggingFaceID)
+
+            let loadStart = CFAbsoluteTimeGetCurrent()
+            do {
+                try await llmProcessor.loadModel()
+            } catch {
+                print("  ❌ FAILED TO LOAD: \(error.localizedDescription)\n")
+                allModelResults.append(ModelResult(
+                    name: candidate.name, sizeLabel: candidate.sizeLabel,
+                    passed: 0, total: Self.testCases.count,
+                    avgLatency: 0, loadTime: 0, categoryResults: []
+                ))
+                continue
+            }
+            let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
+            print("  Model loaded in \(String(format: "%.2f", loadTime))s\n")
+
+            var caseResults: [CaseResult] = []
+
+            for tc in Self.testCases {
+                // Stage 1: Deterministic self-correction
+                let scConfig = TextProcessingConfig(
+                    fillerRemovalEnabled: false,
+                    selfCorrectionEnabled: config.selfCorrectionEnabled,
+                    fillerWords: config.fillerWords
+                )
+                let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig)
+
+                // Stage 2: Filler removal
+                let frConfig = TextProcessingConfig(
+                    fillerRemovalEnabled: config.fillerRemovalEnabled,
+                    selfCorrectionEnabled: false,
+                    fillerWords: config.fillerWords
+                )
+                let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig)
+
+                // Stage 3: LLM cleanup
+                let llmStart = CFAbsoluteTimeGetCurrent()
+                let afterLLM: String
+                do {
+                    afterLLM = try await llmProcessor.process(
+                        rawText: afterFillers, context: tc.context, cleanupLevel: tc.cleanupLevel
+                    )
+                } catch {
+                    afterLLM = "(LLM error: \(error.localizedDescription))"
+                }
+                let llmLatency = CFAbsoluteTimeGetCurrent() - llmStart
+
+                let passed = afterLLM.trimmingCharacters(in: .whitespacesAndNewlines)
+                    == tc.expected.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                caseResults.append(CaseResult(
+                    testCase: tc, afterSelfCorrection: afterSelfCorrection,
+                    afterFillers: afterFillers, afterLLM: afterLLM,
+                    passed: passed, llmLatency: llmLatency
+                ))
+
+                let icon = passed ? "✅" : "❌"
+                print("  [\(tc.id)] \(icon) \(String(format: "%.2fs", llmLatency))  \(passed ? "" : "got: \"\(afterLLM)\"")")
+            }
+
+            // Per-model summary
+            let totalPassed = caseResults.filter(\.passed).count
+            let totalLatency = caseResults.map(\.llmLatency).reduce(0, +)
+            let avgLatency = totalLatency / Double(caseResults.count)
+
+            // Category breakdown
+            let categories = Dictionary(grouping: caseResults) { $0.testCase.category }
+            let catResults = categories.keys.sorted().map { cat -> (String, Int, Int, TimeInterval) in
+                let cases = categories[cat]!
+                let p = cases.filter(\.passed).count
+                let avgLat = cases.map(\.llmLatency).reduce(0, +) / Double(cases.count)
+                return (cat, p, cases.count, avgLat)
+            }
+
+            allModelResults.append(ModelResult(
+                name: candidate.name, sizeLabel: candidate.sizeLabel,
+                passed: totalPassed, total: caseResults.count,
+                avgLatency: avgLatency, loadTime: loadTime,
+                categoryResults: catResults
+            ))
+
+            print("\n  \(candidate.name): \(totalPassed)/\(caseResults.count) passed, avg \(String(format: "%.2fs", avgLatency))\n")
+        }
+
+        // Final comparison table
+        print("\n" + String(repeating: "━", count: 80))
+        print("  MULTI-MODEL COMPARISON SUMMARY")
+        print(String(repeating: "━", count: 80))
+        print("  \(pad("Model", 20)) \(pad("Pass", 6)) \(pad("Total", 6)) \(pad("Rate", 8)) \(pad("Avg Lat", 10)) \(pad("Load", 10))")
+        print("  " + String(repeating: "─", count: 70))
+
+        let sortedResults = allModelResults.sorted { $0.passed > $1.passed || ($0.passed == $1.passed && $0.avgLatency < $1.avgLatency) }
+        for r in sortedResults {
+            let rate = r.total > 0 ? String(format: "%.1f%%", Double(r.passed) / Double(r.total) * 100) : "N/A"
+            let lat = r.avgLatency > 0 ? String(format: "%.2fs", r.avgLatency) : "N/A"
+            let load = r.loadTime > 0 ? String(format: "%.1fs", r.loadTime) : "FAIL"
+            print("  \(pad(r.name, 20)) \(pad("\(r.passed)", 6)) \(pad("\(r.total)", 6)) \(pad(rate, 8)) \(pad(lat, 10)) \(pad(load, 10))")
+        }
+        print("  " + String(repeating: "─", count: 70))
+
+        // Category breakdown for top 3 models
+        let top3 = Array(sortedResults.prefix(3))
+        print("\n  TOP 3 — PER-CATEGORY BREAKDOWN")
+        print("  \(pad("Category", 25))", terminator: "")
+        for r in top3 { print(" \(pad(r.name, 15))", terminator: "") }
+        print()
+        print("  " + String(repeating: "─", count: 25 + top3.count * 16))
+
+        let allCategories = Set(top3.flatMap { $0.categoryResults.map(\.0) }).sorted()
+        for cat in allCategories {
+            print("  \(pad(cat, 25))", terminator: "")
+            for r in top3 {
+                if let cr = r.categoryResults.first(where: { $0.0 == cat }) {
+                    print(" \(pad("\(cr.1)/\(cr.2)", 6))\(pad(String(format: "%.2fs", cr.3), 9))", terminator: "")
+                } else {
+                    print(" \(pad("N/A", 15))", terminator: "")
+                }
+            }
+            print()
+        }
+
+        print("\n  Best model: \(sortedResults.first?.name ?? "none")")
+        print("    Pass rate: \(sortedResults.first.map { "\($0.passed)/\($0.total)" } ?? "N/A")")
+        print("    Avg latency: \(sortedResults.first.map { String(format: "%.2fs", $0.avgLatency) } ?? "N/A")")
+        print()
+    }
 }
