@@ -398,16 +398,32 @@ final class TranscriptionPipeline {
         let cleanupLevel = appState?.cleanupLevel ?? .medium
         let language = appState?.selectedLanguage ?? .auto
         let hinglishScript = appState?.selectedHinglishScript ?? .romanized
+        let llmAvailable = mode == .local
+            && (appState?.llmModelManager.isDownloaded(appState?.selectedLLMModel ?? LLMModelCatalog.defaultModel) ?? false)
 
         // Determine script preference for Hinglish language only (Step 3.7)
         let scriptPreference: HinglishScript? = (language == .hinglish) ? hinglishScript : nil
 
         // Step 1-2: Deterministic text processing
-        let preLLMText = textProcessor.process(text, config: config)
+        //
+        // When the LLM is active at medium/full cleanup, keep self-correction
+        // markers in the text so the model can rewrite the full utterance with
+        // intact context. This avoids the deterministic detector collapsing a
+        // partial repair ("... scratch that, to John") into a suffix fragment
+        // before the LLM ever sees the stable prefix.
+        let deterministicConfig: TextProcessingConfig
+        if llmAvailable && cleanupLevel != .light {
+            deterministicConfig = TextProcessingConfig(
+                fillerRemovalEnabled: config.fillerRemovalEnabled,
+                selfCorrectionEnabled: false,
+                fillerWords: config.fillerWords
+            )
+        } else {
+            deterministicConfig = config
+        }
+        let preLLMText = textProcessor.process(text, config: deterministicConfig)
 
         // Step 3: LLM post-processing (if enabled AND model is downloaded)
-        let llmAvailable = mode == .local
-            && (appState?.llmModelManager.isDownloaded(appState?.selectedLLMModel ?? LLMModelCatalog.defaultModel) ?? false)
         let processor: PostProcessor = llmAvailable ? llmProcessor : noOpProcessor
 
         if mode == .local && !llmAvailable {

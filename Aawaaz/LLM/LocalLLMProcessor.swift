@@ -44,6 +44,7 @@ actor LocalLLMProcessor: PostProcessor {
     private var activeLoadTask: Task<ModelContainer, Error>?
     /// Tracks which model ID the active load is for, to discard stale progress.
     private var activeLoadModelID: String?
+    private let selfCorrectionDetector = SelfCorrectionDetector()
 
     /// The model to use for inference.
     private(set) var selectedModel: LLMModel
@@ -74,7 +75,14 @@ actor LocalLLMProcessor: PostProcessor {
         let cleaned = Self.stripThinkingTags(rawOutput)
 
         // Guard against model returning empty or gibberish
-        return cleaned.isEmpty ? rawText : cleaned
+        guard !cleaned.isEmpty else { return rawText }
+
+        if Self.shouldPreferDeterministicCorrectionFallback(input: trimmed, output: cleaned) {
+            let fallback = selfCorrectionDetector.detectAndResolve(trimmed)
+            return fallback.isEmpty ? rawText : fallback
+        }
+
+        return cleaned
     }
 
     // MARK: - Model Lifecycle
@@ -237,10 +245,19 @@ actor LocalLLMProcessor: PostProcessor {
             instructions = [
                 "1. Fix grammar, punctuation, and capitalization",
                 "2. Improve sentence structure where clearly needed",
-                "3. If the speaker corrects themselves (e.g. \"actually no\", \"scratch that\", \"sorry\", \"never mind\"), remove the retracted part and keep only the final corrected version",
-                "4. Keep the speaker's intent and meaning exactly intact",
-                "5. Do NOT add, infer, or embellish content",
-                "6. If the text mixes Hindi and English, preserve the code-switching naturally",
+                "3. Make the smallest possible edit. Preserve unchanged words and sentence structure whenever possible",
+                "4. If the speaker corrects themselves (e.g. \"actually no\", \"scratch that\", \"sorry\", \"never mind\"), replace only the superseded span and keep the stable prefix intact",
+                "5. If the correction after the marker is a fragment (e.g. \"to John\" or \"Wednesday\"), attach it back to the existing sentence instead of outputting the fragment by itself",
+                "6. Keep the speaker's intent and meaning exactly intact",
+                "7. Do NOT add, infer, or embellish content",
+                "8. If the text mixes Hindi and English, preserve the code-switching naturally",
+                """
+                Examples:
+                Input: can you send it to Mark, oh scratch that, to John
+                Output: can you send it to John
+                Input: the meeting is Tuesday, actually no, Wednesday
+                Output: the meeting is Wednesday
+                """,
             ]
 
         case .full:
@@ -249,11 +266,20 @@ actor LocalLLMProcessor: PostProcessor {
                 "1. Fix grammar, punctuation, and capitalization",
                 "2. Remove obvious filler words (e.g. um, uh, you know, basically) only when clearly disfluent",
                 "3. Improve sentence structure for clarity",
-                "4. If the speaker corrects themselves (e.g. \"actually no\", \"scratch that\", \"sorry\", \"never mind\"), remove the retracted part and keep only the final corrected version",
-                "5. Keep the speaker's intent and meaning exactly intact",
-                "6. Do NOT add, infer, or embellish content",
-                "7. If the text mixes Hindi and English, preserve the code-switching naturally",
-                categoryInstruction,
+                "4. Make the smallest possible edit. Preserve unchanged words and sentence structure whenever possible",
+                "5. If the speaker corrects themselves (e.g. \"actually no\", \"scratch that\", \"sorry\", \"never mind\"), replace only the superseded span and keep the stable prefix intact",
+                "6. If the correction after the marker is a fragment (e.g. \"to John\" or \"Wednesday\"), attach it back to the existing sentence instead of outputting the fragment by itself",
+                "7. Keep the speaker's intent and meaning exactly intact",
+                "8. Do NOT add, infer, or embellish content",
+                "9. If the text mixes Hindi and English, preserve the code-switching naturally",
+                """
+                Examples:
+                Input: can you send it to Mark, oh scratch that, to John
+                Output: can you send it to John
+                Input: the meeting is Tuesday, actually no, Wednesday
+                Output: the meeting is Wednesday
+                """,
+                categoryInstruction.replacingOccurrences(of: "8.", with: "10."),
             ]
         }
 
@@ -344,6 +370,60 @@ actor LocalLLMProcessor: PostProcessor {
 
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    static func shouldPreferDeterministicCorrectionFallback(input: String, output: String) -> Bool {
+        let trimmedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard containsCorrectionMarker(trimmedInput), !trimmedOutput.isEmpty else {
+            return false
+        }
+
+        let inputWords = words(in: trimmedInput)
+        let outputWords = words(in: trimmedOutput)
+
+        guard inputWords.count >= 4, !outputWords.isEmpty else {
+            return false
+        }
+
+        if outputWords.count == 1 {
+            return true
+        }
+
+        if outputWords.count <= 4,
+           let first = outputWords.first,
+           fragmentLeadTokens.contains(first) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func containsCorrectionMarker(_ text: String) -> Bool {
+        SelfCorrectionDetector.defaultMarkers.contains { marker in
+            text.range(of: marker.phrase, options: .caseInsensitive) != nil
+        }
+    }
+
+    private static func words(in text: String) -> [String] {
+        guard !text.isEmpty,
+              let regex = try? NSRegularExpression(pattern: "\\b[\\p{L}\\p{N}']+\\b") else {
+            return []
+        }
+
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        return regex.matches(in: text, range: range).map {
+            nsText.substring(with: $0.range).lowercased()
+        }
+    }
+
+    private static let fragmentLeadTokens: Set<String> = [
+        "to", "for", "with", "at", "in", "on", "from", "into", "onto", "about",
+        "of", "the", "a", "an", "this", "that", "these", "those",
+        "my", "your", "his", "her", "our", "their", "its",
+        "next", "last",
+    ]
 }
 
 // MARK: - Errors

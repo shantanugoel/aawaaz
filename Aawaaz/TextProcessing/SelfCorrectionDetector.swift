@@ -6,9 +6,11 @@ import Foundation
 /// When a speaker says "Turn left, actually no, turn right", this detector
 /// recognizes "actually no" as a correction marker and returns "turn right".
 ///
-/// Processes the text left-to-right. When a correction marker is found,
-/// everything before it (in the current sentence) is discarded and the text
-/// after the marker is kept.
+/// Uses a conservative repair strategy:
+/// - Standalone restart phrases ("start over", "scratch that" as its own clause)
+///   can discard earlier text across sentence boundaries.
+/// - Inline correction phrases ("I mean", "sorry", "actually no") preserve the
+///   stable prefix and replace only the corrected tail when possible.
 struct SelfCorrectionDetector {
 
     /// A correction marker phrase with optional context requirements.
@@ -18,49 +20,92 @@ struct SelfCorrectionDetector {
         /// or other clause-breaking punctuation. Prevents false positives
         /// for common words like "wait" and "sorry".
         let requiresLeadingPunctuation: Bool
+        /// Whether this marker can reset prior text when it appears as a
+        /// standalone restart clause between sentences.
+        let allowsStandaloneRestart: Bool
+    }
+
+    private struct WordToken {
+        let text: String
+        let lowercased: String
+        let range: Range<String.Index>
     }
 
     /// Correction markers, ordered longest-first so multi-word markers
     /// are matched before their substrings.
     static let defaultMarkers: [Marker] = [
-        Marker(phrase: "let me start over", requiresLeadingPunctuation: false),
-        Marker(phrase: "let me rephrase", requiresLeadingPunctuation: false),
-        Marker(phrase: "scratch that", requiresLeadingPunctuation: false),
-        Marker(phrase: "actually no", requiresLeadingPunctuation: false),
-        Marker(phrase: "never mind", requiresLeadingPunctuation: false),
-        Marker(phrase: "nevermind", requiresLeadingPunctuation: false),
-        Marker(phrase: "forget that", requiresLeadingPunctuation: false),
-        Marker(phrase: "forget it", requiresLeadingPunctuation: false),
-        Marker(phrase: "start over", requiresLeadingPunctuation: false),
-        Marker(phrase: "no no no", requiresLeadingPunctuation: false),
-        Marker(phrase: "no no", requiresLeadingPunctuation: false),
-        Marker(phrase: "I mean", requiresLeadingPunctuation: true),
-        Marker(phrase: "sorry", requiresLeadingPunctuation: true),
-        Marker(phrase: "wait", requiresLeadingPunctuation: true),
+        Marker(phrase: "let me start over", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "let me rephrase", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "scratch that", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "actually no", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "never mind", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "nevermind", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "forget that", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "forget it", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "start over", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "no no no", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "no no", requiresLeadingPunctuation: false, allowsStandaloneRestart: true),
+        Marker(phrase: "I mean", requiresLeadingPunctuation: true, allowsStandaloneRestart: false),
+        Marker(phrase: "sorry", requiresLeadingPunctuation: true, allowsStandaloneRestart: false),
+        Marker(phrase: "wait", requiresLeadingPunctuation: true, allowsStandaloneRestart: false),
+    ]
+
+    private static let standaloneLeadInWords: Set<String> = [
+        "oh", "uh", "um", "erm", "well", "so", "sorry",
+    ]
+
+    private static let trailingLeadInWords: Set<String> = [
+        "oh", "uh", "um", "erm", "well", "so", "sorry",
+    ]
+
+    private static let repairLeadInWords: Set<String> = [
+        "oh", "uh", "um", "erm", "well", "so",
+    ]
+
+    private static let fragmentLeadTokens: Set<String> = [
+        "to", "for", "with", "at", "in", "on", "from", "into", "onto", "about",
+        "of", "the", "a", "an", "this", "that", "these", "those",
+        "my", "your", "his", "her", "our", "their", "its",
+        "next", "last",
+    ]
+
+    private static let fullClauseStarters: Set<String> = [
+        "i", "i'm", "i've", "i'd", "i'll",
+        "it", "it's",
+        "we", "we're", "we've", "we'd", "we'll",
+        "you", "you're", "you've", "you'd", "you'll",
+        "he", "he's", "she", "she's", "they", "they're",
+        "there", "here", "let's", "please",
+    ]
+
+    private static let boundaryTokens: Set<String> = [
+        "to", "for", "with", "at", "in", "on", "from", "into", "onto", "about",
+        "of", "the", "a", "an", "this", "that", "these", "those",
+        "my", "your", "his", "her", "our", "their", "its",
+        "is", "are", "was", "were", "am", "be", "been",
     ]
 
     /// Detect and resolve self-corrections in the input text.
     ///
     /// Two-phase approach:
-    /// 1. **Full-text scope**: Markers like "scratch that" and "actually no"
-    ///    discard everything before them, spanning sentence boundaries. This
-    ///    handles cases where Whisper punctuates across the correction
-    ///    (e.g. "Hey Mark. Scratch that. Hey John." → "Hey John.").
-    /// 2. **Per-sentence scope**: Context-dependent markers ("sorry", "wait",
-    ///    "I mean") correct within their sentence only.
+    /// 1. **Standalone restarts**: Markers like "scratch that" and
+    ///    "actually no" discard earlier text only when they act as their own
+    ///    restart clause across sentence boundaries.
+    /// 2. **Inline repairs**: Markers inside a sentence preserve stable prefix
+    ///    where possible and replace only the corrected tail.
     ///
     /// - Parameter text: The transcription text to process.
     /// - Returns: Text with self-corrections resolved.
     func detectAndResolve(_ text: String) -> String {
         guard !text.isEmpty else { return text }
 
-        // Phase 1: Full-text scope — markers without leading-punctuation
-        // requirement discard everything before them, spanning sentences.
-        let afterFullText = resolveFullTextMarkers(text)
+        // Phase 1: Only standalone restart clauses can discard prior text
+        // across sentence boundaries.
+        let afterStandaloneRestarts = resolveStandaloneRestarts(text)
 
-        // Phase 2: Per-sentence scope — context-dependent markers correct
-        // within their sentence.
-        let sentences = splitIntoSentences(afterFullText)
+        // Phase 2: Per-sentence scope — inline markers preserve the stable
+        // prefix whenever possible.
+        let sentences = splitIntoSentences(afterStandaloneRestarts)
         let processed = sentences.map { resolveSentence($0) }
         let result = processed.joined(separator: " ")
 
@@ -69,21 +114,17 @@ struct SelfCorrectionDetector {
 
     // MARK: - Private
 
-    /// Resolve correction markers that span sentence boundaries.
-    ///
-    /// Markers without a leading-punctuation requirement (e.g. "scratch that",
-    /// "actually no") indicate the speaker wants to discard everything said so
-    /// far. This method scans the **full** text and, when such a marker is
-    /// found, discards all content before (and including) the marker.
+    /// Resolve restart markers that behave like standalone "start over"
+    /// clauses between sentences.
     ///
     /// Example: "Hey Mark. Oh sorry, scratch that. Hey John." → "Hey John."
-    private func resolveFullTextMarkers(_ text: String) -> String {
+    private func resolveStandaloneRestarts(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var lastMarkerEnd: String.Index?
 
-        let fullTextMarkers = Self.defaultMarkers.filter { !$0.requiresLeadingPunctuation }
+        let standaloneRestartMarkers = Self.defaultMarkers.filter(\.allowsStandaloneRestart)
 
-        for marker in fullTextMarkers {
+        for marker in standaloneRestartMarkers {
             var searchStart = trimmed.startIndex
             while let range = trimmed.range(of: marker.phrase,
                                             options: .caseInsensitive,
@@ -93,18 +134,15 @@ struct SelfCorrectionDetector {
                 let isBoundaryAfter = range.upperBound == trimmed.endIndex
                     || !trimmed[range.upperBound].isLetter
 
-                if isBoundaryBefore && isBoundaryAfter {
+                if isBoundaryBefore
+                    && isBoundaryAfter
+                    && qualifiesAsStandaloneRestart(trimmed, markerRange: range) {
                     // Skip past trailing punctuation and whitespace so we land
                     // at the start of the next meaningful content.
-                    var afterMarker = range.upperBound
-                    while afterMarker < trimmed.endIndex {
-                        let ch = trimmed[afterMarker]
-                        if ".,;:!?".contains(ch) || ch.isWhitespace {
-                            afterMarker = trimmed.index(after: afterMarker)
-                        } else {
-                            break
-                        }
-                    }
+                    let afterMarker = skipSeparatorsAndRepairLeadIn(
+                        in: trimmed,
+                        from: range.upperBound
+                    )
 
                     if lastMarkerEnd == nil || afterMarker > lastMarkerEnd! {
                         lastMarkerEnd = afterMarker
@@ -130,6 +168,31 @@ struct SelfCorrectionDetector {
         }
 
         return corrected
+    }
+
+    private func qualifiesAsStandaloneRestart(
+        _ text: String,
+        markerRange: Range<String.Index>
+    ) -> Bool {
+        let sentenceStart = sentenceStartIndex(in: text, before: markerRange.lowerBound)
+        let leadIn = String(text[sentenceStart..<markerRange.lowerBound])
+
+        let wordTokens = words(in: leadIn)
+        guard !wordTokens.isEmpty else { return true }
+
+        return wordTokens.allSatisfy { Self.standaloneLeadInWords.contains($0.lowercased) }
+    }
+
+    private func sentenceStartIndex(in text: String, before index: String.Index) -> String.Index {
+        var cursor = index
+        while cursor > text.startIndex {
+            let previous = text.index(before: cursor)
+            if ".!?".contains(text[previous]) {
+                return text.index(after: previous)
+            }
+            cursor = previous
+        }
+        return text.startIndex
     }
 
     /// Split text into sentence-like chunks on `.!?` boundaries, preserving
@@ -167,62 +230,44 @@ struct SelfCorrectionDetector {
 
     /// Resolve corrections within a single sentence.
     ///
-    /// Finds the **last** correction marker in the sentence and keeps only the
-    /// text after it. This handles cascading corrections like
-    /// "Go left, wait, go right, actually no, go straight" → "go straight".
+    /// Applies the earliest valid correction repeatedly so cascading repairs are
+    /// handled left-to-right:
+    /// "Send it to Mark, sorry, to John, actually no, to Sarah" →
+    /// "Send it to Sarah"
     private func resolveSentence(_ sentence: String) -> String {
-        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
-        var lastMarkerEnd: String.Index?
+        var working = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !working.isEmpty else { return sentence }
+
+        var passes = 0
+        while passes < 8, let match = nextMarker(in: working) {
+            let before = String(working[..<match.range.lowerBound])
+            let repair = String(working[match.repairStart...])
+            let merged = mergeCorrection(before: before, repair: repair, originalSentence: working)
+
+            if merged == working {
+                break
+            }
+
+            working = merged
+            passes += 1
+        }
+
+        return working
+    }
+
+    private func nextMarker(in sentence: String) -> (range: Range<String.Index>, repairStart: String.Index)? {
+        var earliest: (range: Range<String.Index>, repairStart: String.Index)?
 
         for marker in Self.defaultMarkers {
-            var searchStart = trimmed.startIndex
-            while let range = trimmed.range(of: marker.phrase,
-                                            options: .caseInsensitive,
-                                            range: searchStart..<trimmed.endIndex) {
-                // Verify word boundaries to avoid partial matches
-                let isBoundaryBefore = range.lowerBound == trimmed.startIndex
-                    || !trimmed[trimmed.index(before: range.lowerBound)].isLetter
-                let isBoundaryAfter = range.upperBound == trimmed.endIndex
-                    || !trimmed[range.upperBound].isLetter
-
-                // For context-dependent markers, require surrounding punctuation
-                // to distinguish correction usage from legitimate usage.
-                let meetsContextRequirement: Bool
-                if marker.requiresLeadingPunctuation {
-                    if range.lowerBound == trimmed.startIndex {
-                        // At sentence start: require trailing comma/punctuation
-                        // "Wait, go right" → correction; "Wait for me" → not a correction
-                        if range.upperBound < trimmed.endIndex {
-                            let nextChar = trimmed[range.upperBound]
-                            meetsContextRequirement = ",;:".contains(nextChar)
-                        } else {
-                            meetsContextRequirement = false
-                        }
-                    } else {
-                        let preceding = trimmed[trimmed.startIndex..<range.lowerBound]
-                            .trimmingCharacters(in: .whitespaces)
-                        if let lastChar = preceding.last {
-                            meetsContextRequirement = ",;:.!?".contains(lastChar)
-                        } else {
-                            meetsContextRequirement = false
-                        }
-                    }
-                } else {
-                    meetsContextRequirement = true
-                }
-
-                if isBoundaryBefore && isBoundaryAfter && meetsContextRequirement {
-                    // Skip optional comma and whitespace after the marker
-                    var afterMarker = range.upperBound
-                    if afterMarker < trimmed.endIndex && trimmed[afterMarker] == "," {
-                        afterMarker = trimmed.index(after: afterMarker)
-                    }
-                    while afterMarker < trimmed.endIndex && trimmed[afterMarker] == " " {
-                        afterMarker = trimmed.index(after: afterMarker)
-                    }
-
-                    if lastMarkerEnd == nil || afterMarker > lastMarkerEnd! {
-                        lastMarkerEnd = afterMarker
+            var searchStart = sentence.startIndex
+            while let range = sentence.range(of: marker.phrase,
+                                             options: .caseInsensitive,
+                                             range: searchStart..<sentence.endIndex) {
+                if isValidMarkerMatch(marker, range: range, in: sentence) {
+                    let repairStart = skipSeparatorsAndRepairLeadIn(in: sentence, from: range.upperBound)
+                    if repairStart < sentence.endIndex,
+                       earliest == nil || range.lowerBound < earliest!.range.lowerBound {
+                        earliest = (range, repairStart)
                     }
                 }
 
@@ -230,21 +275,210 @@ struct SelfCorrectionDetector {
             }
         }
 
-        guard let markerEnd = lastMarkerEnd, markerEnd < trimmed.endIndex else {
-            return sentence
+        return earliest
+    }
+
+    private func isValidMarkerMatch(
+        _ marker: Marker,
+        range: Range<String.Index>,
+        in sentence: String
+    ) -> Bool {
+        // Verify word boundaries to avoid partial matches
+        let isBoundaryBefore = range.lowerBound == sentence.startIndex
+            || !sentence[sentence.index(before: range.lowerBound)].isLetter
+        let isBoundaryAfter = range.upperBound == sentence.endIndex
+            || !sentence[range.upperBound].isLetter
+
+        guard isBoundaryBefore && isBoundaryAfter else { return false }
+
+        // For context-dependent markers, require surrounding punctuation
+        // to distinguish correction usage from legitimate usage.
+        if marker.requiresLeadingPunctuation {
+            if range.lowerBound == sentence.startIndex {
+                if range.upperBound < sentence.endIndex {
+                    let nextChar = sentence[range.upperBound]
+                    return ",;:".contains(nextChar)
+                }
+                return false
+            }
+
+            let preceding = sentence[sentence.startIndex..<range.lowerBound]
+                .trimmingCharacters(in: .whitespaces)
+            if let lastChar = preceding.last {
+                return ",;:.!?".contains(lastChar)
+            }
+            return false
         }
 
-        let corrected = String(trimmed[markerEnd...])
+        return true
+    }
+
+    private func mergeCorrection(before: String, repair: String, originalSentence: String) -> String {
+        let stablePrefix = stripTrailingLeadIn(from: before)
+        let normalizedRepair = stripLeadingRepairLeadIn(from: repair)
+
+        guard !normalizedRepair.isEmpty else { return originalSentence }
+
+        if repairLooksLikeFragment(normalizedRepair, before: stablePrefix),
+           let preservedPrefix = preservedPrefix(for: stablePrefix, repair: normalizedRepair) {
+            let stitched = stitch(prefix: preservedPrefix, repair: normalizedRepair)
+            return normalizedSentenceStart(stitched, basedOn: originalSentence)
+        }
+
+        return normalizedSentenceStart(normalizedRepair, basedOn: originalSentence)
+    }
+
+    private func stripTrailingLeadIn(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokens = words(in: trimmed)
+
+        guard let lastMeaningful = tokens.lastIndex(where: { !Self.trailingLeadInWords.contains($0.lowercased) }) else {
+            return ""
+        }
+
+        let nextIndex: String.Index
+        if lastMeaningful + 1 < tokens.count {
+            nextIndex = tokens[lastMeaningful + 1].range.lowerBound
+        } else {
+            nextIndex = trimmed.endIndex
+        }
+
+        var candidate = String(trimmed[..<nextIndex])
+        candidate = candidate.replacingOccurrences(
+            of: "[\\s,;:]+$",
+            with: "",
+            options: .regularExpression
+        )
+        return candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func stripLeadingRepairLeadIn(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tokens = words(in: trimmed)
+        var firstMeaningful = 0
+
+        while firstMeaningful < tokens.count,
+              Self.repairLeadInWords.contains(tokens[firstMeaningful].lowercased) {
+            firstMeaningful += 1
+        }
+
+        guard firstMeaningful < tokens.count else {
+            return ""
+        }
+
+        let start = tokens[firstMeaningful].range.lowerBound
+        return String(trimmed[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func repairLooksLikeFragment(_ repair: String, before: String) -> Bool {
+        let repairTokens = words(in: repair)
+        let beforeTokens = words(in: before)
+
+        guard let first = repairTokens.first?.lowercased else {
+            return false
+        }
+
+        if repairTokens.count == 1 {
+            return true
+        }
+
+        if Self.fragmentLeadTokens.contains(first) {
+            return true
+        }
+
+        if Self.fullClauseStarters.contains(first) {
+            return false
+        }
+
+        return beforeTokens.count >= 5 && repairTokens.count <= 3
+    }
+
+    private func preservedPrefix(for before: String, repair: String) -> String? {
+        let beforeTokens = words(in: before)
+        let repairTokens = words(in: repair)
+
+        guard let firstRepair = repairTokens.first?.lowercased,
+              !beforeTokens.isEmpty else {
+            return nil
+        }
+
+        if let sharedAnchor = beforeTokens.last(where: { $0.lowercased == firstRepair }) {
+            return String(before[..<sharedAnchor.range.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if let boundary = beforeTokens.last(where: { Self.boundaryTokens.contains($0.lowercased) }) {
+            return String(before[..<boundary.range.upperBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        guard beforeTokens.count > 1 else { return nil }
+
+        return String(before[..<beforeTokens.last!.range.lowerBound])
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        // If the correction is empty (marker was at the end), keep the original
-        guard !corrected.isEmpty else { return sentence }
+    private func stitch(prefix: String, repair: String) -> String {
+        let trimmedPrefix = prefix
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "[,;:]+$", with: "", options: .regularExpression)
+        let trimmedRepair = repair.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Capitalize the first character if the original sentence started with uppercase
-        if trimmed.first?.isUppercase == true, let first = corrected.first, first.isLowercase {
-            return first.uppercased() + corrected.dropFirst()
+        guard !trimmedPrefix.isEmpty else { return trimmedRepair }
+        guard !trimmedRepair.isEmpty else { return trimmedPrefix }
+
+        return "\(trimmedPrefix) \(trimmedRepair)"
+            .replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
+    }
+
+    private func normalizedSentenceStart(_ text: String, basedOn original: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+
+        if original.first?.isUppercase == true, let first = trimmed.first, first.isLowercase {
+            return first.uppercased() + trimmed.dropFirst()
         }
 
-        return corrected
+        return trimmed
+    }
+
+    private func skipSeparatorsAndRepairLeadIn(
+        in text: String,
+        from start: String.Index
+    ) -> String.Index {
+        var index = start
+        while index < text.endIndex {
+            let character = text[index]
+            if ".,;:!?".contains(character) || character.isWhitespace {
+                index = text.index(after: index)
+            } else {
+                break
+            }
+        }
+
+        let remainder = String(text[index...])
+        let stripped = stripLeadingRepairLeadIn(from: remainder)
+        guard !stripped.isEmpty,
+              let range = remainder.range(of: stripped) else {
+            return index
+        }
+
+        return text.index(index, offsetBy: remainder.distance(from: remainder.startIndex, to: range.lowerBound))
+    }
+
+    private func words(in text: String) -> [WordToken] {
+        guard !text.isEmpty,
+              let regex = try? NSRegularExpression(pattern: "\\b[\\p{L}\\p{N}']+\\b") else {
+            return []
+        }
+
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+
+        return regex.matches(in: text, range: range).compactMap { match in
+            guard let tokenRange = Range(match.range, in: text) else { return nil }
+            let token = String(text[tokenRange])
+            return WordToken(text: token, lowercased: token.lowercased(), range: tokenRange)
+        }
     }
 }

@@ -16,7 +16,7 @@ final class TextProcessorTests: XCTestCase {
         )
         XCTAssertEqual(
             processor.process("Turn left, actually no, um, turn right", config: config),
-            "turn right"
+            "Turn right"
         )
     }
 
@@ -29,6 +29,18 @@ final class TextProcessorTests: XCTestCase {
         XCTAssertEqual(
             processor.process("Um I was going to say, scratch that, basically the project is done", config: config),
             "the project is done"
+        )
+    }
+
+    func testSelfCorrectionPreservesStablePrefix() {
+        let config = TextProcessingConfig(
+            fillerRemovalEnabled: true,
+            selfCorrectionEnabled: true,
+            fillerWords: TextProcessingConfig.defaultFillerWords
+        )
+        XCTAssertEqual(
+            processor.process("Can you send it to Mark, oh scratch that, to John", config: config),
+            "Can you send it to John"
         )
     }
 

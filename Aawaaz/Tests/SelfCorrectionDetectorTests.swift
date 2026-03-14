@@ -17,7 +17,7 @@ final class SelfCorrectionDetectorTests: XCTestCase {
     func testIMeanCorrectionWithComma() {
         XCTAssertEqual(
             detector.detectAndResolve("Go to the park, I mean the beach"),
-            "The beach"
+            "Go to the beach"
         )
     }
 
@@ -31,7 +31,7 @@ final class SelfCorrectionDetectorTests: XCTestCase {
     func testSorryCorrectionWithComma() {
         XCTAssertEqual(
             detector.detectAndResolve("His name is John, sorry, James"),
-            "James"
+            "His name is James"
         )
     }
 
@@ -53,6 +53,20 @@ final class SelfCorrectionDetectorTests: XCTestCase {
         XCTAssertEqual(
             detector.detectAndResolve("Send the email now, scratch that, send it tomorrow"),
             "Send it tomorrow"
+        )
+    }
+
+    func testScratchThatPreservesStablePrefixForFragmentRepair() {
+        XCTAssertEqual(
+            detector.detectAndResolve("Can you send it to Mark, oh scratch that, to John"),
+            "Can you send it to John"
+        )
+    }
+
+    func testSorryPreservesStablePrefixForSingleWordRepair() {
+        XCTAssertEqual(
+            detector.detectAndResolve("Call Mark, sorry, John"),
+            "Call John"
         )
     }
 

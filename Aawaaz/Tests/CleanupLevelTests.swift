@@ -127,6 +127,8 @@ final class CleanupLevelTests: XCTestCase {
         let prompt = LocalLLMProcessor.buildSystemPrompt(for: context, cleanupLevel: .medium)
 
         XCTAssert(prompt.contains("corrects themselves"), "Medium prompt should handle self-corrections")
+        XCTAssert(prompt.contains("smallest possible edit"), "Medium prompt should prefer minimal rewrites")
+        XCTAssert(prompt.contains("stable prefix intact"), "Medium prompt should preserve stable prefix")
     }
 
     func testMediumPromptHasNoCategoryInstruction() {
@@ -147,6 +149,7 @@ final class CleanupLevelTests: XCTestCase {
         let prompt = LocalLLMProcessor.buildSystemPrompt(for: context, cleanupLevel: .full)
 
         XCTAssert(prompt.contains("Remove obvious filler words"), "Full prompt should remove fillers")
+        XCTAssert(prompt.contains("smallest possible edit"), "Full prompt should prefer minimal rewrites")
     }
 
     func testFullPromptIncludesCategoryForEmail() {
@@ -278,5 +281,25 @@ final class CleanupLevelTests: XCTestCase {
             let output = try await processor.process(rawText: input, context: context, cleanupLevel: level, scriptPreference: nil)
             XCTAssertEqual(output, input, "NoOpProcessor should return input unchanged at \(level.displayName)")
         }
+    }
+
+    // MARK: - LLM Output Guard
+
+    func testCorrectionFallbackDetectsFragmentCollapse() {
+        XCTAssertTrue(
+            LocalLLMProcessor.shouldPreferDeterministicCorrectionFallback(
+                input: "can you send it to mark, oh scratch that, to john",
+                output: "to john"
+            )
+        )
+    }
+
+    func testCorrectionFallbackAllowsCompleteRewrite() {
+        XCTAssertFalse(
+            LocalLLMProcessor.shouldPreferDeterministicCorrectionFallback(
+                input: "go left, actually no, go right",
+                output: "go right"
+            )
+        )
     }
 }
