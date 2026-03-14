@@ -30,9 +30,13 @@ final class LLMModelManager {
     // MARK: - Cache Paths
 
     /// Base directory where MLX/HuggingFace Hub caches downloaded models.
+    ///
+    /// MLX's `defaultHubApi` sets `downloadBase = cachesDirectory`, and
+    /// the Hub library appends `models/<repoID>` via `localRepoLocation`.
+    /// So the full path is `~/Library/Caches/models/<huggingFaceID>/`.
     static let cacheBase: URL = {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        return caches.appendingPathComponent("models/models", isDirectory: true)
+        return caches.appendingPathComponent("models", isDirectory: true)
     }()
 
     /// Returns the expected cache directory for a given HuggingFace model ID.
@@ -50,6 +54,11 @@ final class LLMModelManager {
 
     func isDownloaded(_ model: LLMModel) -> Bool {
         downloadedModels.contains(model)
+    }
+
+    /// Whether any LLM models have been downloaded.
+    var hasDownloadedModels: Bool {
+        !downloadedModels.isEmpty
     }
 
     /// Start downloading a model. Uses MLX's `loadModelContainer` which

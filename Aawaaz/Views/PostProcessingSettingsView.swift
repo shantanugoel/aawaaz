@@ -40,6 +40,15 @@ struct PostProcessingSettingsView: View {
 
             if appState.postProcessingMode == .local {
                 Section("LLM Model") {
+                    if !appState.llmModelManager.hasDownloadedModels {
+                        Label(
+                            "Download a model to use local post-processing.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(.orange)
+                        .font(.callout)
+                    }
+
                     ForEach(LLMModelCatalog.models) { info in
                         LLMModelRow(info: info)
                     }
@@ -75,7 +84,7 @@ private struct LLMModelRow: View {
     @Environment(AppState.self) private var appState
 
     private var isSelected: Bool {
-        appState.selectedLLMModel == info.model
+        appState.selectedLLMModel == info.model && isDownloaded
     }
 
     private var isDownloaded: Bool {
@@ -102,6 +111,7 @@ private struct LLMModelRow: View {
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
             }
             .buttonStyle(.borderless)
+            .disabled(!isDownloaded)
             .help(isDownloaded ? "Use this model" : "Download the model first")
 
             // Model metadata
@@ -149,12 +159,6 @@ private struct LLMModelRow: View {
             }
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if isDownloaded {
-                appState.selectedLLMModel = info.model
-            }
-        }
     }
 
     private var downloadingControls: some View {
