@@ -491,36 +491,39 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 
 #### Step 3.2: Post-Processor Protocol
 
-- [ ] `PostProcessor.swift` — Protocol:
+- [x] `PostProcessor.swift` — Protocol:
   ```swift
   protocol PostProcessor {
       func process(rawText: String, context: InsertionContext) async throws -> String
   }
   ```
-- [ ] `InsertionContext` extension: add `appCategory` enum (see Step 3.7 for tone/context matching)
-- [ ] `NoOpProcessor.swift` — Pass-through implementation (when disabled)
+- [x] `InsertionContext` extension: add `appCategory` enum (see Step 3.7 for tone/context matching)
+- [x] `NoOpProcessor.swift` — Pass-through implementation (when disabled)
 
 #### Step 3.3: Local LLM Integration
 
-- [ ] Add llama.cpp as Swift Package dependency
-- [ ] `LLMModelCatalog.swift` — Catalog of available LLM models:
-  | Model | GGUF File | Size (Q4_K_M) | RAM | Speed (M2+) | Quality |
-  |-------|-----------|---------------|-----|-------------|---------|
-  | **Qwen 3 0.6B** | qwen3-0.6b-q4_k_m.gguf | ~0.4 GB | ~1 GB | <0.5s | Good — **default** |
-  | Qwen 3.5 0.8B | qwen3.5-0.8b-q4_k_m.gguf | ~0.5 GB | ~1.2 GB | <0.5s | High |
-  | Gemma 3 1B | gemma-3-1b-q4_k_m.gguf | ~0.7 GB | ~1.5 GB | ~0.5s | High |
-  | Llama 3.2 3B | llama-3.2-3b-q4_k_m.gguf | ~1.8 GB | ~2.5 GB | ~1-2s | Very High |
-  | Phi-4-mini 3.8B | phi-4-mini-q4_k_m.gguf | ~2.2 GB | ~3 GB | ~1-2s | Very High |
+- [ ] Do not assume Qwen requires `llama.cpp`. Qwen can run locally via multiple runtimes; choose the runtime based on app fit, not model branding.
+- [ ] Runtime decision:
+  - [ ] Primary path: **MLX Swift LM** for Apple-Silicon-only macOS builds (best native Swift integration, official Qwen MLX artifacts, no GGUF conversion requirement)
+  - [ ] Fallback path: **llama.cpp** if MLX blocks shipping because of packaging, model support, determinism, or benchmark regressions
+  - [ ] Make the final runtime choice after a short spike comparing: Swift/Xcode integration, cold start, steady-state latency, memory while Whisper is loaded, and output cleanliness for rewrite-only prompts
+- [ ] Add the chosen runtime as a Swift Package dependency
+- [ ] `LLMModelCatalog.swift` — Catalog of available LLM models and runtime-specific artifacts:
+  | Model | Preferred Runtime | Artifact | Approx Size | RAM | Speed (M2+) | Quality |
+  |-------|-------------------|----------|-------------|-----|-------------|---------|
+  | **Qwen 3 0.6B** | **MLX Swift LM** | `Qwen/Qwen3-0.6B-MLX-6bit` | ~0.47 GB | ~1 GB | <0.5s | Good — **default** |
+  | Qwen 3.5 0.8B | Validate after runtime spike | exact artifact TBD | ~0.5 GB | ~1.2 GB | <0.5s | High |
+  | Gemma 3 1B | Validate after runtime spike | exact artifact TBD | ~0.7 GB | ~1.5 GB | ~0.5s | High |
 - [ ] `LocalLLMProcessor.swift`:
-  - [ ] Load GGUF model (default: Qwen 3 0.6B Q4_K_M — ~0.4 GB, coexists with Whisper even on 8GB machines)
+  - [ ] Load the chosen runtime artifact (MLX by default if the spike passes; GGUF only if we intentionally choose `llama.cpp`)
   - [ ] Construct prompt: system instruction + context + raw text → cleaned text
+  - [ ] For Qwen, force non-thinking / direct cleanup behavior so the model returns only rewritten text
   - [ ] Run inference with low temperature (0.1-0.2 for cleanup tasks)
   - [ ] Parse output, extract cleaned text
   - [ ] Model lazy-load and unload support
   - [ ] Smart memory management: on 8GB machines, recommend Qwen 3 0.6B; on 16GB+, allow larger models
-  - [ ] Benchmark Qwen 3 0.6B vs Gemma 3 1B vs Llama 3.2 3B on representative cleanup tasks
 
-#### Step 3.4: Remote LLM Integration
+#### Step 3.4: Remote LLM Integration - Defer for later
 
 - [ ] `RemoteLLMProcessor.swift`:
   - [ ] Support Claude API (Haiku for speed, Sonnet for quality)

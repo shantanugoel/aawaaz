@@ -41,6 +41,8 @@
 		AA000051 /* TextProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100051 /* TextProcessor.swift */; };
 		AA000052 /* FillerWordRemover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100052 /* FillerWordRemover.swift */; };
 		AA000053 /* SelfCorrectionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100053 /* SelfCorrectionDetector.swift */; };
+		AA000054 /* PostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100054 /* PostProcessor.swift */; };
+		AA000055 /* NoOpProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100055 /* NoOpProcessor.swift */; };
 		AAT00001 /* VADStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10001 /* VADStateTests.swift */; };
 		AAT00002 /* HotkeyConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10002 /* HotkeyConfigurationTests.swift */; };
 		AAT00003 /* HotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10003 /* HotkeyManagerTests.swift */; };
@@ -89,6 +91,8 @@
 		AA100051 /* TextProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextProcessor.swift; sourceTree = "<group>"; };
 		AA100052 /* FillerWordRemover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordRemover.swift; sourceTree = "<group>"; };
 		AA100053 /* SelfCorrectionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCorrectionDetector.swift; sourceTree = "<group>"; };
+		AA100054 /* PostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostProcessor.swift; sourceTree = "<group>"; };
+		AA100055 /* NoOpProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoOpProcessor.swift; sourceTree = "<group>"; };
 		AAT10001 /* VADStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADStateTests.swift; sourceTree = "<group>"; };
 		AAT10002 /* HotkeyConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfigurationTests.swift; sourceTree = "<group>"; };
 		AAT10003 /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
@@ -281,6 +285,8 @@
 				AA100051 /* TextProcessor.swift */,
 				AA100052 /* FillerWordRemover.swift */,
 				AA100053 /* SelfCorrectionDetector.swift */,
+				AA100054 /* PostProcessor.swift */,
+				AA100055 /* NoOpProcessor.swift */,
 			);
 			path = TextProcessing;
 			sourceTree = "<group>";
@@ -433,6 +439,8 @@
 				AA000051 /* TextProcessor.swift in Sources */,
 				AA000052 /* FillerWordRemover.swift in Sources */,
 				AA000053 /* SelfCorrectionDetector.swift in Sources */,
+				AA000054 /* PostProcessor.swift in Sources */,
+				AA000055 /* NoOpProcessor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
