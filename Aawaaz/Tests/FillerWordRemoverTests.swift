@@ -168,4 +168,57 @@ final class FillerWordRemoverTests: XCTestCase {
             "I went to the store"
         )
     }
+
+    // MARK: - Context-Sensitive "you know" (Guard Words)
+
+    func testKeepsYouKnowAfterDo() {
+        XCTAssertEqual(
+            remover.removeFillers(from: "Do you know where it is?", fillerWords: defaults),
+            "Do you know where it is?"
+        )
+    }
+
+    func testKeepsYouKnowAfterDid() {
+        XCTAssertEqual(
+            remover.removeFillers(from: "Did you know that whales sing?", fillerWords: defaults),
+            "Did you know that whales sing?"
+        )
+    }
+
+    func testKeepsYouKnowAfterDont() {
+        XCTAssertEqual(
+            remover.removeFillers(from: "I don't you know what happened", fillerWords: defaults),
+            "I don't you know what happened"
+        )
+    }
+
+    func testKeepsYouKnowAfterIf() {
+        XCTAssertEqual(
+            remover.removeFillers(from: "Let me check if you know the answer", fillerWords: defaults),
+            "Let me check if you know the answer"
+        )
+    }
+
+    func testRemovesFillerYouKnowAfterNonGuardWord() {
+        XCTAssertEqual(
+            remover.removeFillers(from: "I was you know going to the store", fillerWords: defaults),
+            "I was going to the store"
+        )
+    }
+
+    func testRemovesFillerYouKnowAtStart() {
+        XCTAssertEqual(
+            remover.removeFillers(from: "You know I was going to the store", fillerWords: defaults),
+            "I was going to the store"
+        )
+    }
+
+    func testMixedVerbAndFillerYouKnow() {
+        // "Do you know" is a verb phrase (keep), second "you know" is a filler (remove).
+        // The comma after the first "know" was in the original text and is preserved.
+        XCTAssertEqual(
+            remover.removeFillers(from: "Do you know, you know, where it is?", fillerWords: defaults),
+            "Do you know, where it is?"
+        )
+    }
 }

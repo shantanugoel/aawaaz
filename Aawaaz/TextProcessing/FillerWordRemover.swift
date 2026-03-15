@@ -5,7 +5,26 @@ import Foundation
 /// Handles both single-word fillers ("um", "uh") and multi-word phrases
 /// ("you know"). Cleans up leftover double spaces, orphaned commas, and
 /// leading/trailing whitespace after removal.
+///
+/// Context-sensitive fillers like "you know" are guarded: when preceded by
+/// an auxiliary verb (e.g., "do", "did", "if"), they're kept because
+/// they function as a verb phrase, not a filler.
 struct FillerWordRemover {
+
+    /// Filler phrases that can also function as meaningful verb phrases
+    /// depending on the preceding word. Maps filler phrase (lowercased) to
+    /// the set of preceding words that indicate a verb phrase (keep it).
+    ///
+    /// Example: "Do you know where it is?" → preceded by "do" → keep.
+    ///          "I was, you know, going to the store" → preceded by "was" → remove.
+    static let guardedFillers: [String: Set<String>] = [
+        "you know": [
+            "do", "did", "didn't", "don't", "doesn't",
+            "if", "whether", "that",
+            "could", "would", "should", "can", "will", "might", "may",
+            "won't", "couldn't", "wouldn't", "shouldn't", "shall",
+        ],
+    ]
 
     /// Remove all configured filler words from the input text.
     ///
@@ -31,11 +50,64 @@ struct FillerWordRemover {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
                 continue
             }
-            let range = NSRange(result.startIndex..., in: result)
-            result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "")
+
+            if let guardWords = Self.guardedFillers[filler.lowercased()] {
+                result = removeWithGuards(from: result, regex: regex, guardWords: guardWords)
+            } else {
+                let range = NSRange(result.startIndex..., in: result)
+                result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "")
+            }
         }
 
         return cleanUp(result)
+    }
+
+    // MARK: - Context-Sensitive Removal
+
+    /// Remove filler matches only when NOT preceded by a guard word.
+    ///
+    /// Finds all regex matches, checks the word immediately before each one,
+    /// and skips removal if that word is in the guard set.
+    private func removeWithGuards(
+        from text: String,
+        regex: NSRegularExpression,
+        guardWords: Set<String>
+    ) -> String {
+        let fullRange = NSRange(text.startIndex..., in: text)
+        let matches = regex.matches(in: text, range: fullRange)
+
+        guard !matches.isEmpty else { return text }
+
+        // Collect ranges to remove (skip guarded matches)
+        var rangesToRemove: [Range<String.Index>] = []
+        for match in matches {
+            guard let matchRange = Range(match.range, in: text) else { continue }
+
+            let prefix = text[text.startIndex..<matchRange.lowerBound]
+            let precedingWord = prefix
+                .split(whereSeparator: \.isWhitespace)
+                .last
+                .map { String($0).lowercased().trimmingCharacters(in: .punctuationCharacters) }
+
+            if let word = precedingWord, guardWords.contains(word) {
+                continue
+            }
+
+            rangesToRemove.append(matchRange)
+        }
+
+        guard !rangesToRemove.isEmpty else { return text }
+
+        // Build result by copying everything except removed ranges
+        var result = ""
+        var cursor = text.startIndex
+        for range in rangesToRemove {
+            result += text[cursor..<range.lowerBound]
+            cursor = range.upperBound
+        }
+        result += text[cursor..<text.endIndex]
+
+        return result
     }
 
     // MARK: - Whitespace Cleanup
