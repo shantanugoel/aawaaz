@@ -36,6 +36,27 @@ final class SpokenFormNormalizerTests: XCTestCase {
             SpokenFormNormalizer.normalize("see open parenthesis note close parenthesis"),
             "see (note)"
         )
+        // Alternate forms: start/end, closed
+        XCTAssertEqual(
+            SpokenFormNormalizer.normalize("parenthesis start less than three parenthesis closed"),
+            "(less than three)"
+        )
+        XCTAssertEqual(
+            SpokenFormNormalizer.normalize("start parenthesis note end parenthesis"),
+            "(note)"
+        )
+        XCTAssertEqual(
+            SpokenFormNormalizer.normalize("parenthesis open value parenthesis close"),
+            "(value)"
+        )
+        XCTAssertEqual(
+            SpokenFormNormalizer.normalize("start paren x end paren"),
+            "(x)"
+        )
+        XCTAssertEqual(
+            SpokenFormNormalizer.normalize("closed parenthesis at the end"),
+            ") at the end"
+        )
     }
 
     func testBrackets() {

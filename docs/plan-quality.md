@@ -1231,10 +1231,11 @@ Per-category changes (exact → judge):
 
 25. Add more prompt examples targeting remaining grammar failures:
     - Hinglish example with romanized Hindi preservation
-    - Self-correction example (if LFM2.5 can handle it)
+    - Self-correction example
     - Grammar-focused examples (contractions, comma usage)
 26. Tune example count (4 → 6-8) and measure quality vs. latency trade-off
-27. Run benchmark → expect **~85%+**
+27. Add prompt instruction/examples for converting standalone spoken symbol words to symbols when used between words (e.g., "preposition slash article" → "preposition/article"). Standalone "slash" is too ambiguous for deterministic normalization (false positives: "slash prices", "slash and burn") but the LLM can use context to distinguish. Add 1-2 examples to the prompt showing this conversion.
+28. Run benchmark → expect **~85%+**
 
 ### Phase 7: Personalization Foundation (ongoing)
 
