@@ -43,7 +43,7 @@ struct TextProcessor {
                 let beforeWords = beforeCorrection.split(whereSeparator: \.isWhitespace).count
                 let afterWords = text.split(whereSeparator: \.isWhitespace).count
                 if beforeWords > 0, afterWords > 0,
-                   Double(afterWords) / Double(beforeWords) < 0.5,
+                   Double(afterWords) / Double(beforeWords) <= 0.5,
                    let first = text.first, first.isLowercase {
                     text = first.uppercased() + text.dropFirst()
                 }
@@ -56,11 +56,11 @@ struct TextProcessor {
         }
 
         // Step 3: Spoken-form normalization (converts spoken symbols to written forms)
-        // Skip for code/terminal contexts where spoken forms should stay as words.
-        let skipNormalizer = context.map { $0.appCategory == .code || $0.appCategory == .terminal } ?? false
-        if !skipNormalizer {
-            text = SpokenFormNormalizer.normalize(text)
-        }
+        // In code/terminal contexts, only apply unambiguous patterns (e.g.,
+        // "question mark" → "?") and skip context-dependent ones (URLs, paths,
+        // commands) so that "dot", "slash", "dash" pass through to the LLM.
+        let isCodeTerminal = context.map { $0.appCategory == .code || $0.appCategory == .terminal } ?? false
+        text = SpokenFormNormalizer.normalize(text, unambiguousOnly: isCodeTerminal)
 
         return text
     }

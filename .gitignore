@@ -28,3 +28,13 @@ Models/
 
 # Archives
 *.xcarchive
+
+# Python
+__pycache__
+
+# llm-judge
+llm-judge-results-report.txt
+llm-judge-results.json
+
+# Test outputs
+*.txt

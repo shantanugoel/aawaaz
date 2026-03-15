@@ -112,10 +112,12 @@ actor WhisperManager {
         params.language = UnsafePointer(languageCStr)
         params.detect_language = (language == .auto)
 
-        // Bias Whisper toward Hinglish output via initial_prompt when in Hinglish mode.
+        // Condition Whisper's decoder via initial_prompt to improve punctuation,
+        // capitalization, and proper noun spelling. Zero latency cost.
         let initialPromptCStr: UnsafeMutablePointer<CChar>?
-        if language == .hinglish {
-            let prompt: String
+        let prompt: String
+        switch language {
+        case .hinglish:
             switch hinglishScript {
             case .romanized:
                 prompt = "Yeh ek Hinglish example hai. Meeting schedule karna hai, please email bhej do."
@@ -124,10 +126,12 @@ actor WhisperManager {
             case .mixed:
                 prompt = ""
             }
-            initialPromptCStr = prompt.isEmpty ? nil : strdup(prompt)
-        } else {
-            initialPromptCStr = nil
+        case .english, .auto:
+            prompt = "Hello, this is a properly formatted dictation with correct punctuation and capitalization."
+        case .hindi:
+            prompt = ""
         }
+        initialPromptCStr = prompt.isEmpty ? nil : strdup(prompt)
         defer { initialPromptCStr.map { free($0) } }
         params.initial_prompt = UnsafePointer(initialPromptCStr)
 

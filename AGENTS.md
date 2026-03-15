@@ -35,6 +35,7 @@ All source lives under `Aawaaz/`. Key modules:
 - Follow [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) for all UX decisions.
 - Follow [Apple's Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/) and modern Swift/SwiftUI conventions.
 - Use AppKit only where SwiftUI cannot do the job (AXUIElement, CGEvent, global event monitors).
+- If you need to code/use any python scripts/packages, make sure to use `uv` with a virtualenv. If one doesn't exist already, ask developer if they want to create a new one.
 
 ## Workflow
 

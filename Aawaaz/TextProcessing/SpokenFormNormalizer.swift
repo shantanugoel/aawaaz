@@ -13,28 +13,38 @@ struct SpokenFormNormalizer {
 
     /// Normalize spoken symbols in the given text.
     ///
-    /// - Parameter text: The text to normalize.
+    /// - Parameters:
+    ///   - text: The text to normalize.
+    ///   - unambiguousOnly: When `true`, only unambiguous patterns (e.g.,
+    ///     "question mark" → "?") are applied. Context-dependent patterns
+    ///     (URLs, paths, labels, commands) are skipped. Use this for
+    ///     code/terminal contexts where "dot", "slash", and "dash" should
+    ///     be preserved as words.
     /// - Returns: Text with spoken forms replaced by symbols where appropriate.
-    static func normalize(_ text: String) -> String {
+    static func normalize(_ text: String, unambiguousOnly: Bool = false) -> String {
         guard !text.isEmpty else { return text }
 
         var result = text
 
-        // 1. URL/email/path patterns (detect composite structure first,
-        //    before individual tokens are consumed by simpler rules)
-        result = normalizeURLsAndPaths(result)
+        if !unambiguousOnly {
+            // 1. URL/email/path patterns (detect composite structure first,
+            //    before individual tokens are consumed by simpler rules)
+            result = normalizeURLsAndPaths(result)
+        }
 
-        // 2. Unambiguous patterns (always safe to convert)
+        // 2. Unambiguous patterns (always safe to convert, even in code/terminal)
         result = normalizeUnambiguous(result)
 
-        // 3. Colon after label words (Re:, Bug report:, Subject:, etc.)
-        result = normalizeLabelColons(result)
-
-        // 4. Command-line patterns (dash dash, dash + single char)
-        result = normalizeCommandPatterns(result)
-
-        // 5. Ellipsis
+        // 3. Ellipsis (always safe — "dot dot dot" is never meaningful as words)
         result = normalizeEllipsis(result)
+
+        if !unambiguousOnly {
+            // 4. Colon after label words (Re:, Bug report:, Subject:, etc.)
+            result = normalizeLabelColons(result)
+
+            // 5. Command-line patterns (dash dash, dash + single char)
+            result = normalizeCommandPatterns(result)
+        }
 
         // 6. Clean up spacing around symbols
         result = cleanupSymbolSpacing(result)
