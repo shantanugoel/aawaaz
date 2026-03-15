@@ -25,14 +25,14 @@ The example-driven prompt redesign moved pass rate from **17% → 47%** on the 1
 | Category | Exact | Judge | Root Cause | Fix Approach |
 |---|---|---|---|---|
 | **self-correction-llm** | 5/10 | 7/10 | ~~Implicit corrections ("oh sorry", "no make that") need language understanding or expanded deterministic markers~~ **Fixed in Phase 2.5 P3.** 3 remaining: "well actually" (skipped — too ambiguous), LLM capitalization variance | ✅ Mostly done — 7/10 judge (+7 from 0) |
-| **adversarial** | 1/5 | 2/5 | Chat models fundamentally follow instructions. 2/5 rescued by judge as acceptable passthrough | Cadence-Fast immune to injection; accept remaining for LLM |
+| **adversarial** | 1/5 | 2/5 | Chat models fundamentally follow instructions. 2/5 rescued by judge as acceptable passthrough | Punct model (token classifier) immune to injection; accept remaining for LLM |
 | **names-technical** | 4/10 | 6/10 | Tech term capitalization (Kubernetes, AWS); spoken-form edge cases | Whisper prompt conditioning |
-| **hinglish** | 2/10 | 3/10 | Missing punctuation/capitalization on Hinglish text; formatting_quality avg 0.44 | Cadence-Fast (native Hindi support) + Whisper prompt tuning; defer to Phase 4 |
+| **hinglish** | 2/10 | 3/10 | Missing punctuation/capitalization on Hinglish text; formatting_quality avg 0.44 | Punct model (Hindi Danda F1 96-97%) + Whisper prompt tuning; defer to Phase 4 |
 | **single-line** | 4/5 | 5/5 | ~~Minor formatting edge cases~~ **Fixed in Phase 2.5 P4.** 1 remaining: LLM doesn't capitalize proper noun "John" | ✅ Mostly done — 5/5 judge |
 | **cascading-corrections** | 4/5 | 5/5 | ~~Self-correction detector strips too aggressively~~ **Fixed in Phase 2.5 P2.** 1 remaining case needs semantic matching | ✅ Mostly done |
 | **fillers** | 10/15 | 12/15 | 3 remaining after judge: "like" preserved incorrectly, sentence-start "so" not removed | Improve filler removal rules |
 | **self-correction-det** | 9/12 | 11/12 | ~~Prefix loss in some corrections~~ **Mostly fixed in Phase 2.5 P2.** 3 remaining need LLM-level understanding | Overlap merge improved; remaining deferred |
-| **grammar** | 8/12 | 11/12 | 1 remaining after judge: edge cases (comma placement, sentence splitting) | Cadence-Fast + grammar-only LLM prompt + context injection |
+| **grammar** | 8/12 | 11/12 | 1 remaining after judge: edge cases (comma placement, sentence splitting) | Punct model + grammar-only LLM prompt + context injection |
 
 ---
 
@@ -265,7 +265,7 @@ The SpokenFormNormalizer handles symbols but completely misses **number normaliz
 
 **Interesting research:** [Interspeech 2024 paper by Choi et al.](https://www.isca-archive.org/interspeech_2024/choi24_interspeech.html) proposes K-ITN model that uses LLMs for context-dependent ITN — resolving ambiguities like "two" → "2" vs "two" → "too". Worth monitoring.
 
-**Pipeline position:** After SpokenFormNormalizer, before Cadence-Fast/LLM.
+**Pipeline position:** After SpokenFormNormalizer, before punctuation model/LLM.
 
 **Latency:** <1ms (pure string manipulation with lookup tables).
 **Memory:** ~0 (in-memory lookup tables, negligible).
@@ -432,36 +432,181 @@ Surrounding context competes with the system prompt for the model's attention wi
 
 ---
 
-### Layer 5: Cadence-Fast — Dedicated Punctuation/Capitalization Model
+### Layer 5: Dedicated Punctuation/Capitalization Model — Evaluation & Selection
 
 **Expected impact: +10-15 pass rate** (major improvements across grammar, single-line, names-technical, hinglish)
 
-**This should NOT be deferred.** The 0.6B Qwen model is currently doing *three jobs at once*: punctuation, capitalization, and grammar/style cleanup. Punctuation and capitalization are the hardest for a small autoregressive model because they require bidirectional context. Cadence-Fast is a **270M bidirectional encoder** — architecturally superior for exactly this task, and it can't hallucinate or follow injection prompts.
-
-#### ai4bharat/Cadence-Fast
-
-| Property | Value |
-|---|---|
-| Base model | Gemma-3-270M (bidirectional encoder via MNTP) |
-| Size | ~150 MB |
-| Task | Token classification (punctuation restoration) |
-| Punctuation classes | 30 distinct classes including Indic-specific symbols |
-| Languages | English + Hindi + 21 other Indic languages |
-| Inference | Single-pass encoder (not autoregressive) — immune to prompt injection |
-| Features | Periods, commas, question marks, exclamation marks, colons, semicolons, Hindi danda, etc. |
-| Capitalization | Rule-based (included in `cadence-punctuation` Python package) |
-| Performance | 93.8% of full Cadence (1B) performance |
-| License | MIT |
+**This should NOT be deferred.** The 0.6B Qwen model is currently doing *three jobs at once*: punctuation, capitalization, and grammar/style cleanup. Punctuation and capitalization are the hardest for a small autoregressive model because they require bidirectional context. A dedicated **bidirectional encoder** is architecturally superior for exactly this task, and it can't hallucinate or follow injection prompts.
 
 #### Why this is the highest-impact model addition
 
 1. **Offloads the hardest task from Qwen.** Punctuation and capitalization become deterministic. The LLM prompt simplifies to "fix grammar and improve sentence flow" — a much easier task for a 0.6B model.
-2. **Bidirectional > autoregressive for punctuation.** Cadence sees the whole sentence at once. Qwen generates left-to-right and often gets end-of-sentence punctuation wrong.
-3. **Native Hindi support.** Cadence supports all 22 Indian scheduled languages. Qwen does NOT list Hindi. For Hinglish cases, Cadence handles punctuation dramatically better.
-4. **Immune to adversarial inputs.** It's a token classifier, not a chat model. "Ignore previous instructions" is just text to tag — it can't follow injected commands.
-5. **Fast.** Single-pass encoder inference is ~10-30ms, not 330ms of autoregressive generation.
+2. **Bidirectional > autoregressive for punctuation.** Encoder models see the whole sentence at once. Qwen generates left-to-right and often gets end-of-sentence punctuation wrong.
+3. **Hindi support.** Hinglish punctuation (formatting_quality avg 0.44) is the worst dimension. A model with native Hindi support handles this dramatically better than Qwen (which does NOT list Hindi).
+4. **Immune to adversarial inputs.** Token classifiers can't follow injected instructions — "Ignore previous instructions" is just text to tag.
+5. **Fast.** Single-pass encoder inference is ~2-30ms, not 330ms of autoregressive generation.
 
-#### Revised pipeline with Cadence-Fast
+#### Candidate Models to Evaluate
+
+Three models were identified through deep research. The original plan proposed Cadence-Fast, but research revealed significant deployment concerns and two stronger alternatives.
+
+##### Candidate A: `1-800-BAD-CODE/punct_cap_seg_47_language` (PRIMARY — Recommended)
+
+| Property | Value |
+|---|---|
+| HuggingFace | [1-800-BAD-CODE/punct_cap_seg_47_language](https://huggingface.co/1-800-BAD-CODE/punct_cap_seg_47_language) |
+| Architecture | Custom 6-layer Transformer encoder (512-dim), SentencePiece tokenizer (64k vocab), multi-head pipeline |
+| Parameters | **~40M** |
+| Disk size | ~160 MB (ONNX) |
+| Languages | **47 languages** including English, Hindi, Chinese, Japanese, Arabic |
+| Punctuation classes | ~17 post-punctuation + pre-punctuation (language-specific: Danda, Arabic question mark, CJK stops) |
+| Capitalization/Truecasing | **Neural** per-character multi-label (handles NATO, McDonald's, mRNA, API, iOS) |
+| Sentence segmentation | **Yes** (bonus — can detect sentence boundaries for better downstream processing) |
+| ONNX | **Native** — distributed as ONNX + SentencePiece (no export work needed) |
+| License | Apache 2.0 |
+| Max sequence length | **128 tokens** (handles longer via overlapping sliding windows in `punctuators` package) |
+| F1 (English) | Period: 88.3%, Comma: 67.9%, Truecasing: 90.5% |
+| F1 (Hindi) | Danda: **96.9%**, Truecasing: **92.7%** |
+| Python package | `punctuators` on PyPI (clean ONNX inference wrapper) |
+| Est. inference | **~2-5ms** on Apple Silicon |
+
+**Why this is the top candidate:**
+- **7x smaller** than Cadence-Fast (40M vs 270M) → 5-7x faster inference
+- **Neural truecasing** with per-character predictions — handles proper nouns, acronyms, mixed-case (NATO, iPhone, mRNA). Cadence-Fast only has rule-based capitalization (capitalize after period)
+- **Native ONNX** — zero export work. Load directly via ONNX Runtime or convert to CoreML
+- **Hindi Danda F1 is 96.9%** — excellent for Hinglish punctuation
+- **Sentence segmentation** included — free bonus that neither Cadence-Fast nor the LLM provides
+- Apache 2.0 license
+
+**Weaknesses:**
+- Trained on **news data only**, not speech transcripts — may struggle with conversational/disfluent text
+- **128-token max** per sliding window (see token limits section below)
+- Lower comma F1 (67.9%) compared to larger models
+
+##### Candidate B: `1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase` (FALLBACK — Higher Quality)
+
+| Property | Value |
+|---|---|
+| HuggingFace | [1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase](https://huggingface.co/1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase) |
+| Architecture | XLM-RoBERTa base encoder + same multi-head pipeline as Candidate A |
+| Parameters | ~278M |
+| Disk size | ~1.1 GB FP32 / **~280 MB INT8** |
+| Languages | **47 languages** including English, Hindi, Arabic, Chinese, Japanese |
+| Punctuation classes | ~17 post-punctuation + pre-punctuation + acronym class |
+| Capitalization/Truecasing | **Neural** per-character — **99.59% micro F1** (English), **95.3%** (Hindi) |
+| Sentence segmentation | **Yes** |
+| ONNX | **Native** |
+| License | Apache 2.0 |
+| Max sequence length | **128 tokens** (same sliding window approach) |
+| Downloads | **~331k/month** (very popular, production-proven) |
+| F1 (English) | Period: 92.4%, Comma: 78.8%, Question: 80.5% |
+| F1 (Hindi) | Danda: **97.8%**, Truecasing: **95.3%** |
+| Est. inference | ~10-30ms (similar to Cadence-Fast) |
+
+**Why this is the quality fallback:**
+- **Best truecasing quality available** — 99.59% micro F1 on English, 95.3% Hindi
+- **331k downloads/month** — the most battle-tested punctuation model on HuggingFace
+- **Higher F1 across all marks** — Period 92.4%, Comma 78.8%, Question 80.5%
+- **XLM-RoBERTa backbone is robust to noisy input** — pre-trained on 2.5TB of CommonCrawl data across 100 languages, which includes web text with noise, typos, and informal language. While the fine-tuning was on news data, the backbone's exposure to messy web text gives it better noise tolerance than the smaller custom encoder. For speech transcripts with fillers and disfluencies, this robustness matters — the model won't catastrophically fail on unusual input patterns, it just may not punctuate disfluent regions optimally
+- Same ONNX tooling and `punctuators` API as Candidate A (easy to swap)
+- Similar size to Cadence-Fast but with native ONNX and neural truecasing
+
+**Weaknesses:**
+- **Same speed as Cadence-Fast** (~10-30ms), not faster
+- Larger disk (needs INT8 quantization to reach ~280 MB)
+- Also trained on news data (same caveat as Candidate A)
+
+##### Candidate C: `ai4bharat/Cadence-Fast` (DEPRIORITIZED — Deployment Concerns)
+
+| Property | Value |
+|---|---|
+| HuggingFace | [ai4bharat/Cadence-Fast](https://huggingface.co/ai4bharat/Cadence-Fast) |
+| Architecture | Gemma-3-270M (bidirectional encoder via MNTP) + linear classification head |
+| Parameters | 270M |
+| Disk size | **1.07 GB** (safetensors F32) / ~125 MB (INT4, needs quantization) |
+| Languages | English + Hindi + 21 other Indic languages (23 total) |
+| Punctuation classes | 30 (including Indic-specific: Danda, Urdu marks, Arabic commas, Santali mucaad) |
+| Capitalization/Truecasing | **Rule-based only** (capitalize after sentence-ending punctuation) |
+| ONNX | **Not available** — requires custom export of bidirectional Gemma-3 |
+| License | MIT |
+| Max sequence length | **300 tokens** (sliding window) |
+| Downloads | ~1,823/month (low adoption) |
+| Performance | "93.8% of full Cadence" (unsubstantiated — metric/benchmark not specified) |
+| F1 (written text, focus labels) | ~0.74 macro (estimated from 93.8% of Cadence's 0.79) |
+| F1 (speech transcripts, focus labels) | ~0.59 macro (estimated from 93.8% of Cadence's 0.62) |
+
+**Why deprioritized:**
+
+| Concern | Detail |
+|---------|--------|
+| **No ONNX/CoreML export exists** | Nobody has exported it. The bidirectional attention modification on Gemma-3 is non-standard — standard ONNX exporters assume causal attention. Would require custom `torch.onnx.export` handling of the attention mask hack |
+| **Capitalization is rule-based only** | Not neural. Just "capitalize after period/question mark". Cannot handle proper nouns (Kubernetes, AWS), acronyms (NATO), or mixed-case (iPhone, mRNA) — exactly the cases failing in names-technical |
+| **1.07 GB on disk (F32)** | Much larger than the "~150 MB" originally estimated. INT4 quantization to ~125 MB needs work and may degrade quality |
+| **Custom model code** | Requires `trust_remote_code=True`. Uses `modeling_gemma3_punctuation.py` — non-standard HuggingFace integration |
+| **"93.8%" claim is unsubstantiated** | The Mark My Words paper (arXiv:2506.03793) doesn't mention Cadence-Fast at all. The figure appears only in the model card with no metric or benchmark specified |
+| **Low adoption** | ~1,823 downloads/month. Known bugs: pipe characters in batch mode, Hindi punctuation wrongly applied to Marathi |
+| **Stronger Indic coverage but weaker English** | 30 Indic punct classes is overkill for Aawaaz (primarily English + Hinglish). Extra classes may dilute English accuracy |
+
+**Still worth knowing about:** Cadence-Fast's strength is deep Indic language coverage (22 languages with script-specific marks). If Aawaaz later needs Marathi/Tamil/Bengali/Gujarati support, Cadence becomes relevant. For English + Hindi/Hinglish, Candidates A and B are superior choices.
+
+#### Comparison Matrix
+
+| Property | Candidate A (punct_cap_seg_47) | Candidate B (xlm-r_punct_truecase) | Candidate C (Cadence-Fast) |
+|----------|-------------------------------|-------------------------------------|---------------------------|
+| Parameters | **40M** | 278M | 270M |
+| Disk (deployable) | **~160 MB** | ~280 MB (INT8) | ~125 MB (INT4, needs work) |
+| ONNX native | **Yes** | **Yes** | No (custom export needed) |
+| Neural truecasing | **Yes** (90.5% EN, 92.7% HI) | **Yes** (99.6% EN, 95.3% HI) | No (rule-based) |
+| Sentence segmentation | **Yes** | **Yes** | No |
+| Hindi Danda F1 | **96.9%** | **97.8%** | ~0.74 macro (all labels) |
+| English Period F1 | 88.3% | **92.4%** | ~0.74 macro (all labels) |
+| English Comma F1 | 67.9% | **78.8%** | not reported separately |
+| Est. latency (Apple Silicon) | **~2-5ms** | ~10-30ms | ~10-30ms |
+| Max seq length | 128 tokens | 128 tokens | **300 tokens** |
+| Noise tolerance | Lower (news-trained) | **Higher** (XLM-R backbone) | Medium (speech data in training) |
+| License | Apache 2.0 | Apache 2.0 | MIT |
+| Deployment effort | **Low** | Low | **High** |
+
+#### Token/Sequence Length Limits
+
+Both Candidate A and B have a **128-token max sequence length** per inference window. This is an important constraint to handle correctly:
+
+**Impact on Aawaaz:**
+- Typical dictation utterances are short: 5-50 words (~7-70 tokens). **128 tokens covers the vast majority of inputs with no windowing needed.**
+- Longer dictation sessions (paragraph-length) may exceed 128 tokens and require sliding window processing.
+- The `punctuators` Python package handles this automatically with overlapping windows and prediction merging. The Swift implementation must replicate this logic.
+
+**Sliding window implementation requirements:**
+- Split input into overlapping chunks of 128 tokens (e.g., stride of 96 tokens, overlap of 32)
+- Run inference on each chunk independently
+- Merge predictions in overlap regions (take predictions from the chunk where the token is most centered — i.e., farthest from chunk boundaries, where encoder attention is strongest)
+- Stitch punctuated chunks back together
+
+**Candidate C (Cadence-Fast) has a 300-token window**, which is more generous but still requires windowing for very long inputs. However, for Aawaaz's typical utterance lengths, this difference is rarely exercised.
+
+**Recommendation:** Implement the sliding window logic in Swift as a generic wrapper (`PunctuationModelRunner`) that handles chunking/merging regardless of which model is selected. This also future-proofs against model swaps. For the initial prototype, a simple "truncate to 128 tokens" fallback is acceptable since most dictation utterances are well under this limit.
+
+#### Pipeline Position: Why Punctuation Goes AFTER Deterministic Cleanup
+
+The pipeline ordering matters. There are arguments for placing the punctuation model earlier (before deterministic cleanup), but after analysis, **after deterministic cleanup and before LLM** remains the correct position:
+
+**Why NOT before self-correction detection:**
+- Self-correction markers ("scratch that", "no wait", "oh sorry") rely on raw unpunctuated flow. If punctuated first — "Send to Mark. Oh sorry, to John." — the detector now needs to work across sentence boundaries, which breaks existing pattern matching.
+- The detector is optimized for unpunctuated ASR output.
+
+**Why NOT before filler removal:**
+- Fillers ("um", "uh", "like") are noise the punct model hasn't seen in training (both candidates trained on clean news text). Fillers would confuse the model and produce incorrect punctuation: "Um, I wanted to, like, go there." → then filler removal creates orphaned commas.
+- Removing fillers first gives the punct model cleaner input matching its training distribution.
+
+**Why NOT before SpokenFormNorm:**
+- SpokenFormNormalizer converts "slash api slash v2" → "/api/v2". If punctuated first, the model might insert periods or commas in the middle of what's really a URL path.
+
+**Why AFTER deterministic cleanup works best:**
+- The punct model receives clean, filler-free, self-correction-resolved text — matching its training distribution (clean written text).
+- Punctuation provides sentence structure that helps the downstream LLM with grammar decisions.
+- Capitalization from the punct model gives the LLM properly-cased input, simplifying its task.
+
+**However, test both orderings during evaluation.** The XLM-RoBERTa model (Candidate B) may be robust enough to handle fillers and disfluencies due to its pre-training on noisy CommonCrawl data. If it scores higher when placed before filler removal in benchmarks, that ordering should be adopted.
 
 ```
 ASR (Whisper, prompt-conditioned)
@@ -472,51 +617,46 @@ Deterministic cleanup (TextProcessor)
 ├── Spoken-form normalization
 └── Number/date ITN
     ↓
-Cadence-Fast (punctuation + capitalization)  ← NEW LAYER
+Punctuation model (punct + truecasing — bidirectional encoder, 2-30ms)  ← NEW LAYER
     ↓
-LLM (grammar + style ONLY)  ← SIMPLIFIED TASK
+LLM (grammar + style ONLY — simplified task, context-injected)  ← SIMPLIFIED TASK
     ↓
 Text insertion
 ```
 
-**What changes for the LLM:** With punctuation and capitalization already handled, the LLM system prompt becomes simpler and more focused. The model can focus on grammar corrections, sentence flow, and style adaptation — tasks where autoregressive generation is actually superior. Could drop to `.light` cleanup level for most cases with better results.
+**What changes for the LLM:** With punctuation and capitalization already handled by the encoder, the LLM system prompt becomes simpler and more focused. The model can focus on grammar corrections, sentence flow, and style adaptation — tasks where autoregressive generation is actually superior. Could drop to `.light` cleanup level for most cases with better results.
 
 #### Implementation path
 
-1. Export Cadence-Fast to ONNX via PyTorch's `torch.onnx.export`
-2. Load via ONNX Runtime (same infrastructure already used for Silero VAD)
-3. Run as token classifier: input tokens → output labels (PERIOD, COMMA, QUESTION, CAPITALIZE, etc.)
-4. Apply labels to reconstruct punctuated/capitalized text
-5. Feed to LLM for grammar only
+1. **Prototype in Python** — `pip install punctuators`, run the 100 benchmark cases through both Candidate A and B to measure exact F1 on our test suite
+2. **Select winner** — compare quality, latency, and noise tolerance. If Candidate A's quality is sufficient (especially comma F1), prefer it for speed. If commas/questions are weak, use Candidate B
+3. **ONNX → CoreML conversion** — convert winner's ONNX model to CoreML `.mlpackage` via `coremltools` for ANE acceleration. Alternatively, use ONNX Runtime with CoreML execution provider
+4. **Implement Swift wrapper** — `PunctuationModelRunner.swift` handling tokenization (SentencePiece), sliding window chunking/merging, ONNX/CoreML inference, and label-to-text reconstruction
+5. **Integrate into pipeline** — wire between SpokenFormNormalizer and LLM in `TextProcessor`
+6. **Simplify LLM prompt** — remove punctuation/capitalization instructions, focus on grammar + style only
+7. **Benchmark** — run full 100-case suite with judge scoring
 
-#### Alternative: CoreML conversion
-
-If ONNX Runtime adds too much complexity, Cadence-Fast can be converted to CoreML:
-```bash
-# Via coremltools
-import coremltools as ct
-traced = torch.jit.trace(model, sample_input)
-mlmodel = ct.convert(traced, inputs=[ct.TensorType(shape=sample_input.shape)])
-mlmodel.save("CadenceFast.mlpackage")
-```
-
-CoreML has the advantage of Apple's hardware acceleration (Neural Engine) on M-series chips.
-
-#### Other punctuation/capitalization models worth knowing about
+#### Other models worth knowing about (not recommended for Phase 4 but useful context)
 
 | Model | Architecture | Size | Languages | Notes |
 |---|---|---|---|---|
-| **AssemblyAI Universal-2-TF** | BERT (110M) + BART (139M) two-stage | ~250M total | English | 81.2% human preference; handles punctuation + truecasing + ITN. [arXiv:2501.05948](https://arxiv.org/html/2501.05948v1) |
-| **deepmultilingualpunctuation** | XLM-RoBERTa | ~278M | Multilingual | Open-source PyPI package. [GitHub](https://github.com/oliverguhr/deepmultilingualpunctuation) |
-| **AssemblyAI Truecaser** | Canine + BiLSTM (character-level) | ~50M | English | 39% F1 improvement on mixed-case words, 20% on acronyms. [Blog](https://www.assemblyai.com/blog/introducing-our-new-punctuation-restoration-and-truecasing-models) |
+| **ai4bharat/Cadence** (full) | Gemma-3-1B bidirectional | 1B / ~2 GB | 23 Indic + EN | Quality ceiling for Indic (0.79 macro F1 focus labels). Too large for on-device (~100-200ms). |
+| **sherpa-onnx Edge-Punct** | CNN + BiLSTM | **2-5M / 7 MB INT8** | English only | Fastest possible (~1-3ms). Native Swift/iOS bindings via sherpa-onnx. CC-BY-4.0. Only 3 punct marks, no Hindi. |
+| **unikei/distilbert-base-re-punctuate** | DistilBERT (66M) | 250 MB | English only | Proven **3.5ms on Apple ANE** (Apple's own benchmark). ONNX available. No Hindi. |
+| **AssemblyAI Universal-2-TF** | BERT + BART two-stage | ~250M | English | 81.2% human preference; handles punct + truecasing + ITN. NOT open source (API only). |
+| **deepmultilingualpunctuation** | XLM-RoBERTa | ~278M | Multilingual | Open-source PyPI package. Same backbone as Candidate B but fewer features (no truecasing). [GitHub](https://github.com/oliverguhr/deepmultilingualpunctuation) |
+| **CNN+BiLSTM (arXiv:2407.13142)** | CNN + BiLSTM | **~2M** | English | 1/40th transformer size, 2.5x faster. Code available. English only. Basis for sherpa-onnx Edge-Punct model. |
 
 **Research references:**
-- [Cadence on HuggingFace](https://huggingface.co/ai4bharat/Cadence)
-- [Cadence-Fast on HuggingFace](https://huggingface.co/ai4bharat/Cadence-Fast)
-- [Mark My Words paper (arXiv:2506.03793)](https://arxiv.org/abs/2506.03793)
+- [Cadence / Mark My Words paper (arXiv:2506.03793)](https://arxiv.org/abs/2506.03793)
+- [1-800-BAD-CODE punctuators package (GitHub)](https://github.com/1-800-BAD-CODE/punctuators)
+- [Light-weight CNN+BiLSTM on-device model (arXiv:2407.13142)](https://arxiv.org/abs/2407.13142)
+- [Apple: Deploying Transformers on ANE (ml-ane-transformers)](https://github.com/apple/ml-ane-transformers)
+- [DistilBERT on ANE benchmarks](https://github.com/anentropic/experiments-coreml-ane-distilbert)
+- [Lightweight streaming punct+caps (ScienceDirect 2025)](https://www.sciencedirect.com/science/article/abs/pii/S0167639325000846)
 
-**Latency:** ~10-30ms (single-pass encoder, not autoregressive). Total pipeline: 0.33s → ~0.36s.
-**Memory:** ~150-200MB additional. Total: ~1.2 GB, still well within budget.
+**Latency:** ~2-5ms (Candidate A) or ~10-30ms (Candidate B). Total pipeline: 0.31s → ~0.32-0.34s.
+**Memory:** ~160 MB (Candidate A) or ~280 MB INT8 (Candidate B). Total: ~1.16-1.28 GB, well within budget.
 
 ---
 
@@ -524,7 +664,7 @@ CoreML has the advantage of Apple's hardware acceleration (Neural Engine) on M-s
 
 **Expected impact: +5-10 pass rate** (may fix self-correction-llm, adversarial, remaining grammar)
 
-**Note:** With Cadence-Fast handling punctuation/capitalization, the LLM's job is now grammar + style only. This makes model evaluation more meaningful — we're testing grammar capability, not punctuation capability.
+**Note:** With the punctuation model handling punctuation/capitalization, the LLM's job is now grammar + style only. This makes model evaluation more meaningful — we're testing grammar capability, not punctuation capability.
 
 #### LFM2.5-1.2B-Instruct (Liquid AI)
 
@@ -560,7 +700,7 @@ CoreML has the advantage of Apple's hardware acceleration (Neural Engine) on M-s
 4. If pass rate ≤ 47%: stop searching for general-purpose LLMs and focus on other layers
 
 **Important caveat — Hindi support:**
-LFM2.5 lists Arabic/Chinese/Japanese/Korean/Spanish/French/German/English but does NOT list Hindi. It may perform poorly on Hinglish. Test the 10 Hinglish cases specifically. With Cadence-Fast handling Hindi punctuation, the LLM only needs to handle Hindi grammar — a smaller gap.
+LFM2.5 lists Arabic/Chinese/Japanese/Korean/Spanish/French/German/English but does NOT list Hindi. It may perform poorly on Hinglish. Test the 10 Hinglish cases specifically. With the punctuation model handling Hindi punctuation, the LLM only needs to handle Hindi grammar — a smaller gap.
 
 ---
 
@@ -990,8 +1130,8 @@ Per-category changes (exact → judge):
 
 | Item | Deferred To | Reason |
 |------|-------------|--------|
-| Broad Hinglish punctuation/capitalization | Phase 4 (Cadence-Fast) | Model-architecture problem — needs bidirectional encoder for reliable punct/caps on Hindi text |
-| General formatting quality improvements | Phase 4 (Cadence-Fast) | formatting_quality avg 0.52 is the worst dimension, but primarily driven by Hinglish and names-tech |
+| Broad Hinglish punctuation/capitalization | Phase 4 (punct model) | Model-architecture problem — needs bidirectional encoder for reliable punct/caps on Hindi text. Candidates: punct_cap_seg_47 (Hindi Danda F1 96.9%) or xlm-r_punct_truecase (97.8%) |
+| General formatting quality improvements | Phase 4 (punct model) | formatting_quality avg 0.52 is the worst dimension, but primarily driven by Hinglish and names-tech |
 | Larger model for remaining self-correction-llm | Phase 5 (LFM2.5 eval) | 3 cases remaining after deterministic rescue: "well actually" (1), LLM capitalization (2) |
 | Tech-term capitalization (Kubernetes, AWS, NGINX) | Phase 3 (Whisper prompt) | Better solved upstream via Whisper prompt conditioning |
 | "you know" as content vs filler | Future | Context-dependent disambiguation — "you know what I mean like" vs "you know that project" |
@@ -1003,12 +1143,28 @@ Per-category changes (exact → judge):
 14. ✅ **Layer 4** — Surrounding text context injection via AX API. Added `surroundingText` to `InsertionContext` with `captureSurroundingText()` (reads ~200 chars before cursor from focused AX element). Injected into LLM prompt as `<context_before>` block. System prompt instruction is conditional — only included when surrounding text is present, avoiding overhead on the 0.6B model for cases without context.
 15. ✅ Benchmark: **65% exact / 78% judge** (vs 64%/79% Phase 2.5-P4). Neutral — context infrastructure is in place without regression. The benchmark tests don't exercise surrounding text (all have `surroundingText: nil`), so the context feature's benefit will only show in production use.
 
-### Phase 4: Cadence-Fast Integration (2-3 days)
+### Phase 4: Punctuation Model Evaluation & Integration (2-3 days)
 
-16. Export Cadence-Fast to ONNX or CoreML
-17. Integrate into pipeline between normalizers and LLM
-18. Simplify LLM prompt to grammar-only (remove punctuation/capitalization instructions)
-19. Run benchmark → expect **~80-83%**
+**Step 1: Python prototype evaluation (half day)**
+
+16. `pip install punctuators`, write a Python script to run all 100 benchmark cases through both candidate models:
+    - **Candidate A:** `1-800-BAD-CODE/punct_cap_seg_47_language` (~40M, ~2-5ms, native ONNX)
+    - **Candidate B:** `1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase` (~278M, ~10-30ms, native ONNX)
+17. For each candidate, measure: per-category F1, truecasing accuracy, handling of noisy/disfluent input (fillers, partial words), and latency on Apple Silicon
+18. Test pipeline ordering: (a) after deterministic cleanup (expected best), (b) before filler removal (test if XLM-R's noise robustness helps)
+19. **Decision gate:** If Candidate A's quality is sufficient (especially comma F1 and truecasing on names-technical cases), select it for speed. If commas/questions are weak, select Candidate B. If neither is acceptable on speech-like input, consider Cadence-Fast as fallback (accepting higher deployment cost)
+
+**Step 2: Swift integration (1-2 days)**
+
+20. Convert winner's ONNX to CoreML `.mlpackage` (for ANE acceleration) or use ONNX Runtime with CoreML execution provider
+21. Implement `PunctuationModelRunner.swift`:
+    - SentencePiece tokenizer integration (load `.model` file bundled with the ONNX)
+    - Sliding window logic: chunk input to 128-token windows with 32-token overlap, merge predictions by selecting from window center
+    - ONNX/CoreML inference call
+    - Label-to-text reconstruction (insert punctuation marks, apply truecasing)
+22. Integrate into pipeline between SpokenFormNormalizer and LLM in `TextProcessor`
+23. Simplify LLM prompt to grammar-only (remove punctuation/capitalization instructions)
+24. Run benchmark → expect **~80-83%**
 
 ### Phase 5: LFM2.5 Evaluation (half day)
 
@@ -1080,13 +1236,13 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
 | short-input | 7/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | 8/12 | 11/12 | 8/12 | 9/12 | 8/12 | 9/12 | Cadence-Fast + grammar-only LLM prompt + context injection |
+| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | 8/12 | 11/12 | 8/12 | 9/12 | 8/12 | 9/12 | Punct model + grammar-only LLM prompt + context injection |
 | fillers | 3/15 | 10/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 11/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
 | self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | **9/12** | **11/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | ✅ Done |
-| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 5/10 | 2/10 | 4/10 | Cadence-Fast (native Hindi) + Whisper prompt tuning |
+| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 5/10 | 2/10 | 4/10 | Punct model (Hindi Danda F1 96-97%) + Whisper prompt tuning |
 | names-technical | 0/10 | 2/10 | 2/10 | 3/10 | 4/10 | 6/10 | 4/10 | 6/10 | **5/10** | **7/10** | 5/10 | 6/10 | Whisper prompt conditioning (in place, benefit shows with real ASR) |
 | cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | ✅ Done |
-| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 1/5 | 2/5 | 1/5 | 2/5 | Accept remaining for LLM; Cadence-Fast immune |
+| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 1/5 | 2/5 | 1/5 | 2/5 | Accept remaining for LLM; punct model (token classifier) immune |
 | self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | **5/10** | **7/10** | 5/10 | 7/10 | 6/10 | 7/10 | 3 remaining need larger model or "well actually" |
 | single-line | 1/5 | 0/5 | 3/5 | 3/5 | 2/5 | 4/5 | 2/5 | 4/5 | **4/5** | **5/5** | 4/5 | 5/5 | ✅ Done |
 
@@ -1099,12 +1255,12 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 3. **Repetition penalty kills cleanup tasks.** Any penalty > 1.0 causes the model to drop repeated content words, which is catastrophic when the task is to output nearly the same text.
 4. **Examples > rules for small models.** Concrete input→output pairs teach the transformation shape. Negation-heavy rules ("do NOT change X") confuse sub-1B models.
 5. **Many "LLM failures" are actually deterministic problems.** Spoken-form normalization, capitalization after self-correction, and test expectation mismatches account for ~15-20 of the 53 remaining failures — no LLM needed.
-6. **Adversarial resistance is fundamentally hard for chat LLMs.** Any model trained on instruction-following will sometimes follow adversarial instructions embedded in user content. The `<text>` delimiter + output validator is the best practical defense for on-device models. Cadence-Fast (non-LLM) is inherently immune.
+6. **Adversarial resistance is fundamentally hard for chat LLMs.** Any model trained on instruction-following will sometimes follow adversarial instructions embedded in user content. The `<text>` delimiter + output validator is the best practical defense for on-device models. Token classifiers (punct models) are inherently immune.
 7. **Exact string matching underestimates quality.** Many "failures" are acceptable alternatives (trailing periods, contraction preferences). LLM-as-Judge scoring is needed for accurate quality measurement.
 8. **Context is the competitive moat, not model size.** WisprFlow uses much larger models server-side, but their quality advantage comes primarily from context injection (surrounding text, app awareness, user history) and personalization (learning from corrections).
-9. **Decompose the LLM's task.** Rather than asking a 0.6B model to do punctuation + capitalization + grammar + style simultaneously, offload punctuation/capitalization to a specialized model (Cadence-Fast) and let the LLM focus on grammar/style only.
+9. **Decompose the LLM's task.** Rather than asking a 0.6B model to do punctuation + capitalization + grammar + style simultaneously, offload punctuation/capitalization to a specialized bidirectional encoder and let the LLM focus on grammar/style only.
 10. **Upstream improvements compound.** Whisper prompt conditioning improves ASR output → cleaner input to the deterministic pipeline → less work for the LLM → better final quality. Each layer's output is the next layer's input.
-11. **LLM-as-Judge reveals the true quality gap.** Exact match understates quality by ~11 points (50% exact vs 61% judge). Formatting quality (avg 0.52) and intent match (avg 0.47) are the worst dimensions — both primarily fixable by Cadence-Fast, not LLM tuning.
+11. **LLM-as-Judge reveals the true quality gap.** Exact match understates quality by ~11 points (50% exact vs 61% judge). Formatting quality (avg 0.52) and intent match (avg 0.47) are the worst dimensions — both primarily fixable by a dedicated punctuation model, not LLM tuning.
 12. **Benchmark harness must match pipeline stages.** When the pipeline adds stages (SpokenFormNormalizer), the benchmark trace labels and pipeline steps must be updated to match. Stale benchmarks create diagnostic confusion.
 13. **Cascading self-corrections need prefix preservation.** The current greedy approach to multiple corrections in one utterance loses sentence structure. Each correction should replace only the corrected segment, not discard the stable prefix.
 14. **Implicit self-corrections are partially deterministic.** While "oh sorry", "wait hold on", and "no make that" look like they need LLM understanding, they're actually high-precision deterministic triggers. The boundary between deterministic and LLM-required is further out than initially assumed.
@@ -1127,7 +1283,7 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | `TextProcessing/SelfCorrectionDetector.swift` | ✅ Done | Fix 2b capitalization + prefix preservation (Phase 2.5 P2) + **implicit correction markers with biasFragmentMerge, validation guards, sentence-start guard** (Phase 2.5 P3) |
 | `Transcription/TranscriptionPipeline.swift` | ✅ Done | TextProcessor wired in; Whisper prompt conditioning via `sessionAppCategory` (captured at session start); context injection via `captureSurrounding: true` at finalize time |
 | `TextInsertion/InsertionContext.swift` | ✅ Done | Added `surroundingText` property via AX API; `captureSurroundingText()`, `isSecureField()` (fail-closed), `getFocusedElement()` with CF type guard; `captureSurrounding` parameter on `current()` |
-| `Models/CadenceFastModel.swift` | ❌ Not started | ONNX/CoreML wrapper for Cadence-Fast inference |
+| `Models/PunctuationModelRunner.swift` | ❌ Not started | ONNX/CoreML wrapper for punctuation model inference (SentencePiece tokenizer, 128-token sliding window, label reconstruction) |
 | `LLM/LLMModelCatalog.swift` | ❌ Not started | Add LFM2.5-1.2B-Instruct entry |
 | `Tests/CleanupQualityTests.swift` | ✅ Done | Fix 2c fully applied; per-stage trace working |
 | `Tests/LocalLLMProcessorTests.swift` | ✅ Done | **New file** — 15 unit tests: 12 for post-LLM capitalization guard (Phase 2.5 P4) + 3 for context injection / category prompts (Phase 3) |
@@ -1136,7 +1292,7 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | `scripts/llm_judge.py` | ✅ Done | LLM-as-Judge evaluation script — supports both compact and verbose benchmark output formats |
 | `Transcription/TranscriptionPipeline.swift` | ✅ Done | See above |
 | `TextInsertion/InsertionContext.swift` | ✅ Done | See above |
-| `Models/CadenceFastModel.swift` | **New file** — ONNX/CoreML wrapper for Cadence-Fast inference |
+| `Models/PunctuationModelRunner.swift` | **New file** — ONNX/CoreML wrapper for punctuation model inference (SentencePiece tokenizer, 128-token sliding window, label reconstruction) |
 | `LLM/LLMModelCatalog.swift` | Add LFM2.5-1.2B-Instruct entry |
 | `Tests/CleanupQualityTests.swift` | Fix single-line test expectations; add LLM-as-Judge scoring |
 | `Persistence/CorrectionStore.swift` | **New file** — SQLite storage for user correction pairs |
@@ -1151,10 +1307,10 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 |---|---|---|---|---|---|---|---|---|
 | Pass rate (exact match) | 47% | **50%** | **56%** | **61%** | **64%** | **65%** | ~75% | ~80% |
 | Pass rate (judge score) | ~58% (est.) | **61%** | **70%** | **79%** | **79%** | **78%** | ~80-83% | ~85%+ |
-| Avg latency (LLM cases) | 0.33s | 0.33s | 0.34s | 0.32s | 0.31s | 0.31s | 0.36s (+Cadence) | 0.36s |
-| RAM (total models) | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1.2 GB (+Cadence) | ~1.2-2.2 GB |
+| Avg latency (LLM cases) | 0.33s | 0.33s | 0.34s | 0.32s | 0.31s | 0.31s | 0.32-0.34s (+punct model) | 0.34s |
+| RAM (total models) | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1.16-1.28 GB (+punct model) | ~1.2-2.2 GB |
 | Default model | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | TBD (maybe LFM2.5) |
-| Pipeline stages | 4 | 5 (+SpokenForm) | 5 | 5 | 5 | 5 | 6 (+Cadence) | 6 |
+| Pipeline stages | 4 | 5 (+SpokenForm) | 5 | 5 | 5 | 5 | 6 (+punct model) | 6 |
 
 ---
 
@@ -1173,7 +1329,7 @@ Whisper (prompt-conditioned)
     ↓
 SelfCorrection → FillerRemoval → SpokenFormNorm → NumberNorm
     ↓
-Cadence-Fast (punctuation + capitalization — bidirectional, 10-30ms)
+PunctuationModel (punct + truecasing — bidirectional encoder, 2-30ms, 128-token sliding window)
     ↓
 LLM (grammar + style ONLY — simplified task, context-injected)
     ↓
@@ -1182,8 +1338,10 @@ UserStyleOverrides (personalization dictionary)
 Insert (with correction tracking)
 ```
 
+**Punctuation model candidates:** punct_cap_seg_47 (~40M, ~2-5ms) or xlm-r_punct_truecase (~278M, ~10-30ms). Selected via Phase 4 evaluation. Both provide neural truecasing + sentence segmentation via native ONNX, 47 languages including Hindi.
+
 **Key architectural shift:** The LLM goes from being the *only* quality layer to being the *final* quality layer in a multi-stage pipeline. Each stage handles what it's best at:
 - Deterministic rules: symbols, numbers, fillers, self-correction (0ms, perfect precision)
-- Bidirectional encoder: punctuation, capitalization (10-30ms, high recall)
+- Bidirectional encoder: punctuation, capitalization (2-30ms, high recall, 128-token windows)
 - Autoregressive LLM: grammar, style, tone (330ms, context-aware)
 - User overrides: personalization (0ms, learned preferences)
