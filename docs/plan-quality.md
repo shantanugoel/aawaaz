@@ -1,8 +1,10 @@
 # LLM Cleanup Quality Plan: 47% → 85%+
 
-## Current State (after prompt overhaul)
+## Current State (after Phase 0-1-2 implementation)
 
-The example-driven prompt redesign moved pass rate from **17% → 47%** on the 100-case benchmark. Key wins: capitalization, punctuation, grammar, filler cleanup, and adversarial resistance via `<text>` delimiters. Current best config: **Qwen 3 0.6B, 0.33s avg latency, ~1 GB RAM**.
+The example-driven prompt redesign moved pass rate from **17% → 47%** on the 100-case benchmark. Phase 0-1-2 implementation (LLM-as-Judge, pipeline fixes, SpokenFormNormalizer) moved the measured scores to **50% exact-match, 61% judge pass rate**. Current best config: **Qwen 3 0.6B, 0.33s avg latency, ~1 GB RAM**.
+
+> **⚠️ Benchmark caveat:** The 50/61% scores likely underrepresent actual quality because the SpokenFormNormalizer code is integrated but the benchmark results appear to be from a run before full integration — spoken-form patterns (slash, colon, dot) are not converting in benchmark output. A clean rerun is required before Phase 3.
 
 ### What worked
 
@@ -14,20 +16,23 @@ The example-driven prompt redesign moved pass rate from **17% → 47%** on the 1
 | Positive instructions ("Keep X" vs "Do NOT change X") | Small models follow affirmative instructions better. |
 | Output content-drop validator | Catches catastrophic summarization/injection. |
 | LLM bypass for short/code/terminal inputs | 16 cases trivially pass at 0.00s. |
+| Post-correction capitalization (Fix 2a/2b) | Fixes lowercase output after self-correction and short bypass. |
+| LLM-as-Judge evaluation (Layer 0) | Reveals 11 "false failures" — acceptable alternatives scored as fails by exact match. |
+| SpokenFormNormalizer (Layer 1) | Deterministic URL/email/path/colon/dash conversion. **Implemented but awaiting benchmark verification.** |
 
-### What's still failing (53 cases)
+### What's still failing (39 cases by judge, 50 by exact match)
 
-| Category | Pass/Total | Root Cause | Fix Approach |
-|---|---|---|---|
-| **self-correction-llm** | 0/10 | Implicit corrections ("send to mark oh sorry to john") need language understanding beyond 0.6B | Better model (LFM2.5) or accept as out-of-scope for tiny models |
-| **adversarial** | 0/5 | Chat models fundamentally follow instructions. "Ignore previous" tricks a 0.6B model every time | Output validator improvements; Cadence-Fast immune to injection; larger model; or accept |
-| **names-technical** | 2/10 | "dot"→".", "slash"→"/", capitalization of tech terms (Kubernetes, AWS) | **Deterministic spoken-form normalizer** + Whisper prompt conditioning |
-| **hinglish** | 2/10 | Poor Devanagari/romanized handling, wrong capitalization patterns | Cadence-Fast (native Hindi support) + prompt examples + Whisper prompt tuning |
-| **single-line** | 0/5 | Model adds periods but test expects none; "colon" not converted | Fix test expectations + spoken-form normalizer |
-| **cascading-corrections** | 1/5 | Deterministic reducer → <4 words → LLM bypass → no capitalization | Fix bypass to still capitalize short results |
-| **fillers** | 10/15 | 5 remaining: "like" preserved incorrectly, sentence-start "so" not removed | Improve filler removal rules |
-| **self-correction-det** | 8/12 | 4 remaining: capitalization issues after correction | Post-correction capitalization fix |
-| **grammar** | 8/12 | 4 remaining: edge cases (wrong contraction, missing comma) | Cadence-Fast handles punctuation; LLM focuses on grammar only; context injection |
+| Category | Exact | Judge | Root Cause | Fix Approach |
+|---|---|---|---|---|
+| **self-correction-llm** | 0/10 | 0/10 | Implicit corrections ("oh sorry", "no make that") need language understanding or expanded deterministic markers | Add high-precision multi-word triggers to `SelfCorrectionDetector`; defer remaining to better model |
+| **adversarial** | 0/5 | 2/5 | Chat models fundamentally follow instructions. 2/5 rescued by judge as acceptable passthrough | Cadence-Fast immune to injection; accept remaining for LLM |
+| **names-technical** | 2/10 | 3/10 | Spoken forms not converting in benchmark (integration verification needed); tech term capitalization (Kubernetes, AWS) | **Verify SpokenFormNormalizer in benchmark** + Whisper prompt conditioning |
+| **hinglish** | 2/10 | 3/10 | Missing punctuation/capitalization on Hinglish text; formatting_quality avg 0.44 | Cadence-Fast (native Hindi support) + Whisper prompt tuning; defer to Phase 4 |
+| **single-line** | 3/5 | 3/5 | "colon" not converting (SpokenFormNormalizer verification needed) | Verify normalizer integration + fix test expectations |
+| **cascading-corrections** | 1/5 | 2/5 | Self-correction detector strips too aggressively — loses sentence prefix ("thursday" instead of "The meeting is Thursday") | Fix prefix preservation in `SelfCorrectionDetector` |
+| **fillers** | 10/15 | 12/15 | 3 remaining after judge: "like" preserved incorrectly, sentence-start "so" not removed | Improve filler removal rules |
+| **self-correction-det** | 8/12 | 10/12 | 2 remaining after judge: prefix loss in some corrections | Same root cause as cascading-corrections |
+| **grammar** | 8/12 | 10/12 | 2 remaining after judge: edge cases (comma placement, sentence splitting) | Cadence-Fast + grammar-only LLM prompt + context injection |
 
 ---
 
@@ -61,9 +66,12 @@ Understanding the market leader's approach helps identify what matters most.
 
 ## Plan: Nine Layers to 85%+
 
-### Layer 0: Evaluation Overhaul — LLM-as-Judge
+### Layer 0: Evaluation Overhaul — LLM-as-Judge ✅ DONE
+
+**Status: Complete.** `scripts/llm_judge.py` (645 lines) scores failing cases on 4 dimensions using Gemini. Rebaselined from 47% exact to 61% judge pass rate (+14 points from judge rescue).
 
 **Expected impact: Rebaseline from 47% to ~58% with zero code changes**
+**Actual impact: Rebaselined to 61% judge pass (exceeded prediction)**
 
 The current 47% pass rate likely *underestimates* actual quality by 10-15 points. Exact string matching penalizes acceptable alternatives:
 
@@ -118,11 +126,11 @@ A case PASSES if all dimensions score >= 0.75.
 
 ---
 
-### Layer 1: Deterministic Spoken-Form Normalizer (Swift, no model)
+### Layer 1: Deterministic Spoken-Form Normalizer (Swift, no model) ✅ IMPLEMENTED
 
 **Expected impact: +8-12 pass rate** (fixes names-technical, single-line, some hinglish)
 
-**Status: Implementation started** — `SpokenFormNormalizer.swift` exists with unambiguous patterns, URLs, emails, paths, dotted names, label colons, command-line patterns, and ellipsis handling.
+**Status: Implementation complete** — `SpokenFormNormalizer.swift` (365 lines) with unambiguous patterns, URLs, emails, paths, dotted names, label colons, command-line patterns, and ellipsis handling. Integrated into `TextProcessor.swift:63`. 24 unit tests passing. **Awaiting benchmark verification** — current benchmark results appear to predate integration.
 
 Add a `SpokenFormNormalizer` to the text processing pipeline that runs **after** filler removal and **before** the LLM. It converts spoken punctuation and symbols to their written forms, with context awareness.
 
@@ -264,15 +272,15 @@ The SpokenFormNormalizer handles symbols but completely misses **number normaliz
 
 ---
 
-### Layer 2: Pipeline Fixes (Swift, no model)
+### Layer 2: Pipeline Fixes (Swift, no model) — Partially Done
 
 **Expected impact: +5-8 pass rate** (fixes cascading-corrections, remaining fillers, self-correction-det)
 
-#### Fix 2a: Capitalize short bypass results
+#### Fix 2a: Capitalize short bypass results ✅ DONE
 
 **Problem:** When deterministic self-correction reduces "the meeting is tuesday, scratch that, wednesday, actually no, thursday" to just "thursday", the word count is <4, so LLM is bypassed. Result: no capitalization.
 
-**Fix:** In `LocalLLMProcessor.process()`, when short-input bypass triggers, still capitalize the first letter:
+**Fix:** Implemented in `LocalLLMProcessor.swift:74-81`. When short-input bypass triggers, capitalizes the first letter.
 
 ```swift
 if wordCount < 4 {
@@ -285,17 +293,17 @@ if wordCount < 4 {
 }
 ```
 
-#### Fix 2b: Capitalize after deterministic self-correction
+#### Fix 2b: Capitalize after deterministic self-correction ✅ DONE
 
 **Problem:** `SelfCorrectionDetector` outputs lowercase results when the corrected text starts mid-sentence. E.g., "send to mark, scratch that, to john" → "to john" (lowercase).
 
-**Fix:** Add capitalization in the deterministic post-processing path, after self-correction detection but before filler removal. If the entire result was produced by self-correction (i.e., the result is shorter than 50% of input), capitalize the first character.
+**Fix:** Implemented in `TextProcessor.swift:37-50` + `SelfCorrectionDetector.swift:165-167`. If the entire result was produced by self-correction (≤50% of input words remain), capitalizes the first character in non-code/terminal contexts.
 
-#### Fix 2c: Improve test expectations for single-line
+#### Fix 2c: Improve test expectations for single-line ⚠️ PARTIAL
 
 **Problem:** 5/5 single-line cases fail because the model adds a period (correct behavior for dictation cleanup) but tests expect no period. Also, "colon" is not converted to `:`.
 
-**Fix:** Update `CleanupQualityTests` — single-line expectations should allow trailing periods. The `colon` issue is fixed by Layer 1 (spoken-form normalizer).
+**Fix:** Trailing period expectations have been updated. The `colon` issue depends on SpokenFormNormalizer integration verification (see Phase 2.5). Current results: 3/5 exact match, 3/5 judge pass.
 
 ---
 
@@ -721,32 +729,137 @@ Application: flag words below confidence threshold (e.g., 0.90) in the LLM promp
 
 ## Implementation Order (Revised)
 
-### Phase 0: Evaluation Overhaul (2 hours)
+### Phase 0: Evaluation Overhaul ✅ DONE
 
-1. **Layer 0** — build LLM-as-Judge scoring script
-2. Re-score all 53 failing cases → establish true baseline
-3. Expected rebaseline: **47% → ~58%** (no code changes, judge scoring)
+1. **Layer 0** — build LLM-as-Judge scoring script ✅ (`scripts/llm_judge.py`)
+2. Re-score all failing cases → establish true baseline ✅ (`llm-judge-results.json` + `llm-judge-results-report.txt`)
+3. ~~Expected rebaseline: **47% → ~58%**~~ → **Actual: 50% exact, 61% judge** (exceeded prediction)
 
-### Phase 1: Quick Wins (1 day)
+### Phase 1: Quick Wins ✅ DONE
 
-4. **Fix 2a** — capitalize short bypass results
-5. **Fix 2b** — capitalize after self-correction detection
-6. **Fix 2c** — update single-line test expectations
-7. Run benchmark → expect **~63%** (with judge scoring)
+4. **Fix 2a** — capitalize short bypass results ✅
+5. **Fix 2b** — capitalize after self-correction detection ✅
+6. **Fix 2c** — update single-line test expectations ⚠️ (trailing periods done; colon depends on normalizer verification)
+7. ~~Run benchmark → expect **~63%** (with judge scoring)~~ → **Actual: 61% judge** (close to prediction; normalizer impact not yet reflected)
 
-### Phase 2: Spoken-Form & Number Normalization (1-2 days)
+### Phase 2: Spoken-Form & Number Normalization — Partially Done
 
-8. **Layer 1** — complete `SpokenFormNormalizer` integration (implementation already started)
-9. **Layer 1b** — implement `NumberNormalizer` (cardinal/ordinal numbers, times)
-10. Write unit tests for both normalizers
-11. Integrate into pipeline (after fillers, before LLM)
-12. Run benchmark → expect **~68%**
+8. **Layer 1** — `SpokenFormNormalizer` implementation complete ✅ (365 lines, 24 tests, integrated)
+9. **Layer 1b** — `NumberNormalizer` ❌ NOT IMPLEMENTED
+10. Unit tests: SpokenFormNormalizer ✅, NumberNormalizer ❌
+11. Pipeline integration: SpokenFormNormalizer ✅, NumberNormalizer ❌
+12. ~~Run benchmark → expect **~68%**~~ → **Pending clean rerun** (normalizer impact not yet reflected in results)
 
-### Phase 3: Whisper & Context (1 day)
+### Phase 2.5: Stabilization & Benchmark Rebaseline
+
+**Goal:** Verify that implemented deterministic layers are actually affecting benchmark outputs, fix cascading correction prefix loss, rescue implicit self-corrections with deterministic markers, and establish a clean baseline before Phase 3.
+
+**Exit criteria for moving to Phase 3:**
+- SpokenFormNormalizer is confirmed working in benchmark traces (path/URL/label-colon cases show conversion)
+- Cascading corrections preserve sentence structure (not just the final word)
+- Single-line expectations are aligned with intended behavior
+- Judge score is re-run on fresh results and used as the new baseline
+- Expected judge score after Phase 2.5: **~68-72%**
+
+#### Priority 1: Rebaseline SpokenFormNormalizer (S)
+
+The benchmark results in `llm-judge-results.json` are inconsistent with current source — spoken-form patterns (slash, colon, dot) are not converting in the benchmark output despite `SpokenFormNormalizer` being called in `TextProcessor.process()`. Most likely the benchmark was run before full integration.
+
+- [ ] Clean rebuild and rerun quality benchmark (`llm_quality_tests.sh`)
+- [ ] Add explicit per-stage trace output in `CleanupQualityTests.testCleanupQualityRegression()`:
+  - Print `afterSpokenForms` as a separate stage (currently merged with `afterFillers`)
+  - This makes diagnostic of pipeline stages clear
+- [ ] Add focused regression checks that SpokenFormNormalizer is converting in these specific benchmark inputs:
+  - `slash api slash v2 slash users` → `/api/v2/users`
+  - `https colon slash slash github dot com slash aawaaz` → `https://github.com/aawaaz`
+  - `re colon project update` → `Re: project update`
+  - `bug report colon app crashes` → `Bug report: app crashes`
+- [ ] Rerun `scripts/llm_judge.py` on fresh results
+
+**Expected impact:** If normalizer is working correctly, expect names-technical to jump from 2/10 → ~5-6/10 exact and single-line from 3/5 → ~4-5/5 exact. Judge score should reach ~65-67%.
+
+#### Priority 2: Fix Cascading Correction Prefix Preservation (M)
+
+Current failure: "the meeting is tuesday, scratch that, wednesday, actually no, thursday" → "thursday" (loses "The meeting is" prefix). The `SelfCorrectionDetector` strips everything before the correction marker, leaving only the replacement fragment.
+
+**Root cause:** The detector resolves corrections greedily — when a marker is found, it keeps only the text after the marker. With multiple markers, each pass discards more prefix until only the final word remains.
+
+**Fix approach:** Process each repair only up to the next correction marker, not the full remaining tail:
+- When a marker is found, define the repair span as: text after the marker **up to the next marker or sentence boundary**
+- Merge the repair with the preserved prefix
+- Repeat for subsequent markers
+
+Example trace (correct behavior):
+```
+Input: "the meeting is tuesday, scratch that, wednesday, actually no, thursday"
+Pass 1: marker "scratch that" → replace "tuesday" with "wednesday" → "the meeting is wednesday, actually no, thursday"
+Pass 2: marker "actually no" → replace "wednesday" with "thursday" → "the meeting is thursday"
+Result: "The meeting is Thursday." (prefix preserved, capitalized)
+```
+
+- [ ] Modify `SelfCorrectionDetector` to preserve stable prefix across multi-correction passes
+- [ ] Add targeted unit tests for all 5 cascading-corrections benchmark cases
+- [ ] Verify `selfcorr-det-3` ("the meeting is at three, never mind, it's at four") also benefits (same root cause)
+
+**Expected impact:** cascading-corrections from 1/5 → ~4/5 exact, self-correction-det from 8/12 → ~10-11/12 exact.
+
+#### Priority 3: Add High-Precision Implicit Self-Correction Markers (M)
+
+10% of the benchmark (self-correction-llm 0/10) fails because the LLM cannot resolve implicit corrections like "oh sorry", "wait hold on", "no make that". A small number of high-precision multi-word triggers added to `SelfCorrectionDetector` can rescue a subset without the false-positive risk of loose single-word triggers.
+
+**Safe to add (high-precision, multi-word):**
+- `oh sorry` / `oh sorry,`
+- `wait hold on`
+- `no wait`
+- `no make that`
+- `on second thought`
+- `I meant` / `oops I meant`
+- `correction`
+- `nah use` (before a verb)
+- `or rather` (followed by replacement)
+
+**Do NOT add (too ambiguous — high false-positive risk):**
+- bare `wait` — "wait for the bus" is not a correction
+- bare `sorry` — "sorry for the delay" is not a correction
+- `well actually` — too common in normal speech
+- `nah` alone — "nah I don't think so" may be content, not correction
+
+- [ ] Add high-precision markers to `SelfCorrectionDetector` as a new tier
+- [ ] Add unit tests for each new trigger with both positive (correction) and negative (non-correction) cases
+- [ ] Run benchmark to measure impact
+
+**Expected impact:** self-correction-llm from 0/10 → ~4-6/10 judge. The remaining 4-6 cases require true language understanding and are deferred to a better model or LFM2.5 evaluation.
+
+#### Priority 4: Finish Single-Line Test Expectation Cleanup (S)
+
+- [ ] Review remaining single-line test expectations for consistency
+- [ ] Ensure all 5 single-line cases have aligned expectations (trailing periods, colon conversion)
+- [ ] Verify Fix 2c is fully applied after SpokenFormNormalizer verification
+
+#### Priority 5: NumberNormalizer — Decide Scope (M-L)
+
+`NumberNormalizer` (Layer 1b) is NOT implemented. It handles "twenty three" → "23", "march fifteenth" → "March 15th", etc.
+
+**Decision:** Defer full implementation to post-Phase 2.5 unless the clean rerun reveals it's blocking more cases than expected. Only 1-2 benchmark cases directly require number normalization (names-tech-9: "version two point three point one"). Cardinal numbers are a real user need but not the immediate benchmark bottleneck.
+
+**Recommendation:** Implement lean cardinal numbers only if time permits after Priorities 1-3 are done. Do not block Phase 3 on this.
+
+#### Explicitly Deferred
+
+| Item | Deferred To | Reason |
+|------|-------------|--------|
+| Broad Hinglish punctuation/capitalization | Phase 4 (Cadence-Fast) | Model-architecture problem — needs bidirectional encoder for reliable punct/caps on Hindi text |
+| General formatting quality improvements | Phase 4 (Cadence-Fast) | formatting_quality avg 0.52 is the worst dimension, but primarily driven by Hinglish and names-tech |
+| Larger model for remaining self-correction-llm | Phase 5 (LFM2.5 eval) | 4-6 cases remaining after deterministic rescue need true language understanding |
+| Tech-term capitalization (Kubernetes, AWS, NGINX) | Phase 3 (Whisper prompt) | Better solved upstream via Whisper prompt conditioning |
+| "you know" as content vs filler | Future | Context-dependent disambiguation — "you know what I mean like" vs "you know that project" |
+| Filler "like" in embedded positions | Future | Needs syntactic context to distinguish "I like the color" from "we should like go" |
+
+### Phase 3: Whisper & Context
 
 13. **Layer 3** — add Whisper prompt conditioning (static + dynamic)
 14. **Layer 4** — capture surrounding text via AX API, inject into LLM prompt
-15. Run benchmark → expect **~73%**
+15. Run benchmark → expect **~75-78% judge** (starting from ~68-72% after Phase 2.5)
 
 ### Phase 4: Cadence-Fast Integration (2-3 days)
 
@@ -792,16 +905,17 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ### Complete Progression
 
-| Step | Model | Prompt Style | Pass Rate | Avg Latency | Δ vs Baseline |
-|---|---|---|---|---|---|
-| Step 0 (baseline) | Qwen 3 0.6B | Rules + examples + self-corr | 17/100 (17%) | 0.33s | — |
-| Step 1 | Qwen 3 0.6B | Same (pipeline fix) | 17/100 (17%) | 0.33s | +0 |
-| Step 2 | Qwen 3 0.6B | Same (infra fix) | 17/100 (17%) | 0.33s | +0 |
-| Step 3 | Qwen 3.5 0.8B | Same prompt | 16/100 (16%) | 2.26s | -1, 6.8× slower |
-| Step 4-5 v1 | Qwen 3.5 0.8B | Rules-only (no examples) | 23/100 (23%) | 0.24s | +6 |
-| **Step 4-5 final** | **Qwen 3 0.6B** | **Example-driven** | **47/100 (47%)** | **0.33s** | **+30** |
-| Step 4-5 final | Qwen 3 1.7B | Example-driven | 46/100 (46%) | 0.57s | +29 |
-| Step 4-5 final | Qwen 3.5 0.8B | Example-driven | 29/100 (29%) | 2.66s | +12 |
+| Step | Model | Prompt Style | Pass Rate (Exact) | Pass Rate (Judge) | Avg Latency | Δ vs Baseline |
+|---|---|---|---|---|---|---|
+| Step 0 (baseline) | Qwen 3 0.6B | Rules + examples + self-corr | 17/100 (17%) | — | 0.33s | — |
+| Step 1 | Qwen 3 0.6B | Same (pipeline fix) | 17/100 (17%) | — | 0.33s | +0 |
+| Step 2 | Qwen 3 0.6B | Same (infra fix) | 17/100 (17%) | — | 0.33s | +0 |
+| Step 3 | Qwen 3.5 0.8B | Same prompt | 16/100 (16%) | — | 2.26s | -1, 6.8× slower |
+| Step 4-5 v1 | Qwen 3.5 0.8B | Rules-only (no examples) | 23/100 (23%) | — | 0.24s | +6 |
+| **Step 4-5 final** | **Qwen 3 0.6B** | **Example-driven** | **47/100 (47%)** | — | **0.33s** | **+30** |
+| Step 4-5 final | Qwen 3 1.7B | Example-driven | 46/100 (46%) | — | 0.57s | +29 |
+| Step 4-5 final | Qwen 3.5 0.8B | Example-driven | 29/100 (29%) | — | 2.66s | +12 |
+| **Phase 0-1-2** | **Qwen 3 0.6B** | **Example-driven + Fix 2a/2b** | **50/100 (50%)** | **61/100 (61%)** | **0.33s** | **+33 exact, judge baseline** |
 
 ### Multi-Model Comparison (old prompt, Step 0 style)
 
@@ -818,19 +932,19 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ### Per-Category Progression (Baseline → Current Best)
 
-| Category | Step 0 | Step 4-5 (0.6B) | Δ | Planned Fix |
-|---|---|---|---|---|
-| code-terminal | 4/8 | 8/8 | +4 | Done |
-| short-input | 7/8 | 8/8 | +1 | Done |
-| grammar | 2/12 | 8/12 | +6 | Cadence-Fast + grammar-only LLM prompt + context injection |
-| fillers | 3/15 | 10/15 | +7 | Filler rules improvement |
-| self-correction-det | 0/12 | 8/12 | +8 | Capitalize after correction (Fix 2b) |
-| hinglish | 0/10 | 2/10 | +2 | Cadence-Fast (native Hindi) + Whisper prompt tuning + context |
-| names-technical | 0/10 | 2/10 | +2 | Spoken-form normalizer + Whisper prompt conditioning |
-| cascading-corrections | 0/5 | 1/5 | +1 | Capitalize short bypass (Fix 2a) |
-| adversarial | 0/5 | 0/5 | 0 | Cadence-Fast immune to injection; accept remaining for LLM |
-| self-correction-llm | 0/10 | 0/10 | 0 | Better model (LFM2.5) or accept |
-| single-line | 1/5 | 0/5 | -1 | Fix test expectations (Fix 2c) + context-aware formatting |
+| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Next Fix |
+|---|---|---|---|---|---|
+| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| short-input | 7/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| grammar | 2/12 | 8/12 | 8/12 | 10/12 | Cadence-Fast + grammar-only LLM prompt + context injection |
+| fillers | 3/15 | 10/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
+| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | Fix prefix preservation in cascading corrections (Phase 2.5) |
+| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | Cadence-Fast (native Hindi) + Whisper prompt tuning |
+| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | **Verify SpokenFormNormalizer in benchmark** (Phase 2.5) + Whisper prompt |
+| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | Fix prefix preservation in `SelfCorrectionDetector` (Phase 2.5) |
+| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | Cadence-Fast immune to injection; accept remaining |
+| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | Add high-precision implicit correction markers (Phase 2.5) |
+| single-line | 1/5 | 0/5 | 3/5 | 3/5 | Verify SpokenFormNormalizer colon conversion (Phase 2.5) |
 
 ---
 
@@ -846,19 +960,32 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 8. **Context is the competitive moat, not model size.** WisprFlow uses much larger models server-side, but their quality advantage comes primarily from context injection (surrounding text, app awareness, user history) and personalization (learning from corrections).
 9. **Decompose the LLM's task.** Rather than asking a 0.6B model to do punctuation + capitalization + grammar + style simultaneously, offload punctuation/capitalization to a specialized model (Cadence-Fast) and let the LLM focus on grammar/style only.
 10. **Upstream improvements compound.** Whisper prompt conditioning improves ASR output → cleaner input to the deterministic pipeline → less work for the LLM → better final quality. Each layer's output is the next layer's input.
+11. **LLM-as-Judge reveals the true quality gap.** Exact match understates quality by ~11 points (50% exact vs 61% judge). Formatting quality (avg 0.52) and intent match (avg 0.47) are the worst dimensions — both primarily fixable by Cadence-Fast, not LLM tuning.
+12. **Benchmark harness must match pipeline stages.** When the pipeline adds stages (SpokenFormNormalizer), the benchmark trace labels and pipeline steps must be updated to match. Stale benchmarks create diagnostic confusion.
+13. **Cascading self-corrections need prefix preservation.** The current greedy approach to multiple corrections in one utterance loses sentence structure. Each correction should replace only the corrected segment, not discard the stable prefix.
+14. **Implicit self-corrections are partially deterministic.** While "oh sorry", "wait hold on", and "no make that" look like they need LLM understanding, they're actually high-precision deterministic triggers. The boundary between deterministic and LLM-required is further out than initially assumed.
 
 ---
 
 ## File Change Summary
 
-| File | Changes |
-|---|---|
-| `TextProcessing/SpokenFormNormalizer.swift` | **Exists** — deterministic spoken-form → symbol conversion |
-| `TextProcessing/NumberNormalizer.swift` | **New file** — number/date/time inverse text normalization |
-| `Tests/SpokenFormNormalizerTests.swift` | **Exists** — unit tests for normalizer |
-| `Tests/NumberNormalizerTests.swift` | **New file** — unit tests for number normalizer |
-| `LLM/LocalLLMProcessor.swift` | Capitalize short bypass results; simplify prompt (grammar-only with Cadence) |
-| `TextProcessing/TextProcessor.swift` | Integrate spoken-form normalizer + number normalizer into pipeline |
+| File | Status | Changes |
+|---|---|---|
+| `TextProcessing/SpokenFormNormalizer.swift` | ✅ Done | Deterministic spoken-form → symbol conversion (365 lines, all patterns) |
+| `TextProcessing/NumberNormalizer.swift` | ❌ Not started | Number/date/time inverse text normalization |
+| `Tests/SpokenFormNormalizerTests.swift` | ✅ Done | 24 unit tests covering all pattern types |
+| `Tests/NumberNormalizerTests.swift` | ❌ Not started | Unit tests for number normalizer |
+| `LLM/LocalLLMProcessor.swift` | ✅ Fix 2a done | Capitalize short bypass results |
+| `TextProcessing/TextProcessor.swift` | ✅ Done | SpokenFormNormalizer integrated; Fix 2b capitalization |
+| `TextProcessing/SelfCorrectionDetector.swift` | ⚠️ Needs update | Fix 2b capitalization done; **needs prefix preservation fix for cascading corrections** |
+| `Transcription/TranscriptionPipeline.swift` | ⚠️ Partial | TextProcessor wired in; Whisper prompt conditioning and context injection not yet done |
+| `TextInsertion/InsertionContext.swift` | ❌ Not started | Add `surroundingText` property via AX API |
+| `Models/CadenceFastModel.swift` | ❌ Not started | ONNX/CoreML wrapper for Cadence-Fast inference |
+| `LLM/LLMModelCatalog.swift` | ❌ Not started | Add LFM2.5-1.2B-Instruct entry |
+| `Tests/CleanupQualityTests.swift` | ⚠️ Needs update | Fix 2c partially applied; **needs per-stage trace update** |
+| `Persistence/CorrectionStore.swift` | ❌ Not started | SQLite storage for user correction pairs |
+| `TextProcessing/UserStylePreferences.swift` | ❌ Not started | User-specific formatting overrides |
+| `scripts/llm_judge.py` | ✅ Done | LLM-as-Judge evaluation script (645 lines, Gemini scoring) |
 | `Transcription/TranscriptionPipeline.swift` | Wire normalizers + Cadence-Fast into post-processing; add Whisper prompt conditioning |
 | `TextInsertion/InsertionContext.swift` | Add `surroundingText` property via AX API |
 | `Models/CadenceFastModel.swift` | **New file** — ONNX/CoreML wrapper for Cadence-Fast inference |
@@ -872,20 +999,20 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ## Target Metrics (Revised)
 
-| Metric | Current | Phase 0-1 | Phase 2-3 | Phase 4-5 | Phase 6+ |
+| Metric | Baseline | Phase 0-1-2 (actual) | Phase 2.5 (target) | Phase 3-4 | Phase 5-6+ |
 |---|---|---|---|---|---|
-| Pass rate (exact match) | 47% | ~55% | ~62% | ~75% | ~80% |
-| Pass rate (judge score) | ~58% | ~63% | ~68-73% | ~80-83% | ~85%+ |
+| Pass rate (exact match) | 47% | **50%** | ~62-65% | ~75% | ~80% |
+| Pass rate (judge score) | ~58% (est.) | **61%** | ~68-72% | ~80-83% | ~85%+ |
 | Avg latency (LLM cases) | 0.33s | 0.33s | 0.33s | 0.36s (+Cadence) | 0.36s |
 | RAM (total models) | ~1 GB | ~1 GB | ~1 GB | ~1.2 GB (+Cadence) | ~1.2-2.2 GB |
 | Default model | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | TBD (maybe LFM2.5) |
-| Pipeline stages | 4 | 4 | 5 (+numbers) | 6 (+Cadence) | 6 |
+| Pipeline stages | 4 | 5 (+SpokenForm) | 5 | 6 (+Cadence) | 6 |
 
 ---
 
 ## Architecture: Current vs Target Pipeline
 
-### Current (47%)
+### Current (50% exact / 61% judge)
 
 ```
 Whisper → SelfCorrection → FillerRemoval → SpokenFormNorm → LLM (punct+caps+grammar+style) → Insert
