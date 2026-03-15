@@ -38,3 +38,4 @@ llm-judge-results.json
 
 # Test outputs
 *.txt
+*results*.json

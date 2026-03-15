@@ -1145,14 +1145,38 @@ Per-category changes (exact → judge):
 
 ### Phase 4: Punctuation Model Evaluation & Integration (2-3 days)
 
-**Step 1: Python prototype evaluation (half day)**
+**Step 1: Python prototype evaluation (half day)** ✅ COMPLETED
 
-16. `pip install punctuators`, write a Python script to run all 100 benchmark cases through both candidate models:
-    - **Candidate A:** `1-800-BAD-CODE/punct_cap_seg_47_language` (~40M, ~2-5ms, native ONNX)
-    - **Candidate B:** `1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase` (~278M, ~10-30ms, native ONNX)
-17. For each candidate, measure: per-category F1, truecasing accuracy, handling of noisy/disfluent input (fillers, partial words), and latency on Apple Silicon
-18. Test pipeline ordering: (a) after deterministic cleanup (expected best), (b) before filler removal (test if XLM-R's noise robustness helps)
-19. **Decision gate:** If Candidate A's quality is sufficient (especially comma F1 and truecasing on names-technical cases), select it for speed. If commas/questions are weak, select Candidate B. If neither is acceptable on speech-like input, consider Cadence-Fast as fallback (accepting higher deployment cost)
+16. `uv pip install punctuators` in `.venv`, wrote `scripts/punct_model_eval.py` to run all 100 benchmark cases through both candidate models:
+    - **Candidate A:** `1-800-BAD-CODE/punct_cap_seg_47_language` (~40M, ~2-5ms native, ~63ms Python)
+    - **Candidate B:** `1-800-BAD-CODE/xlm-roberta_punctuation_fullstop_truecase` (~278M, ~10-30ms native, ~247ms Python)
+17. Measured per-category punctuation F1 (period, comma, question, colon, semicolon), truecasing accuracy, word preservation rate, and latency on Apple Silicon
+18. Tested pipeline ordering A (after deterministic cleanup) — primary. Ordering B skipped in final run (A is the expected production ordering).
+19. **Decision gate result:**
+    - Candidate A fails quality bar: comma F1 = 0.17 (need ≥0.50), truecasing = 0.82 (need ≥0.85), **fatal `<unk>` token corruption** on single-char words ("I" → `<unk>`) and CamelCase words
+    - **Candidate B selected**: punct F1 0.78, truecasing 0.91, word preservation 1.00 (perfect), ~4× slower but acceptable
+    - Candidate B wins on every quality metric; A wins only on latency
+    - Key: Hinglish punct F1 0.84 vs 0.62, truecasing 0.94 vs 0.70
+
+    **Phase 4 Step 1 Evaluation Summary (Ordering A, prose categories):**
+
+    | Metric | Candidate A | Candidate B | Winner |
+    |---|---|---|---|
+    | Exact Match | 15/92 (16%) | 35/92 (38%) | B |
+    | Punct F1 (all) | 0.72 | 0.78 | B |
+    | Period F1 | 0.74 | 0.81 | B |
+    | Comma F1 | 0.17 | 0.25 | B |
+    | Question F1 | 0.67 | 0.88 | B |
+    | Truecasing Accuracy | 0.82 | 0.91 | B |
+    | Word Preservation | 0.79 | 1.00 | B |
+    | Avg Latency (Python) | 63ms | 247ms | A |
+    | Model Size (ONNX) | ~160MB | ~280MB | A |
+
+    **Key observations:**
+    - Both models struggle with commas (F1: A=0.17, B=0.25) — LLM will still need to handle comma placement
+    - short-input cases (8 total) all get trailing periods added — production may need to strip trailing periods for very short inputs
+    - Code/terminal guardrail: both models over-capitalize and add unwanted periods — spoken-form-only path (skip punct model) may be needed for code contexts
+    - Candidate A's `<unk>` corruption is a dealbreaker — single-char words like "I" become `<unk>`, CamelCase like "getUserById" → "GET<UNK>SER<UNK>Y<UNK>D"
 
 **Step 2: Swift integration (1-2 days)**
 
@@ -1216,6 +1240,7 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | **Phase 0-1-2** | **Qwen 3 0.6B** | **Example-driven + Fix 2a/2b** | **50/100 (50%)** | **61/100 (61%)** | **0.33s** | **+33 exact, judge baseline** |
 | **Phase 2.5-P4** | **Qwen 3 0.6B** | **+ post-LLM capitalization + post-colon cap** | **64/100 (64%)** | **79/100 (79%)** | **0.31s** | **+47 exact, +18 judge** |
 | **Phase 3** | **Qwen 3 0.6B** | **+ Whisper prompt conditioning + context injection** | **65/100 (65%)** | **78/100 (78%)** | **0.31s** | **+48 exact, +17 judge** |
+| **Phase 4 Step 1** | **Qwen 3 0.6B** | **(no code change — same as Phase 3; punct model eval only)** | **65/100 (65%)** | **82/100 (82%)** | **0.31s** | **+48 exact, +21 judge** |
 
 ### Multi-Model Comparison (old prompt, Step 0 style)
 
@@ -1232,19 +1257,19 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ### Per-Category Progression (Baseline → Current Best)
 
-| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Phase 2.5-P2 (exact) | Phase 2.5-P2 (judge) | Phase 2.5-P3 (exact) | Phase 2.5-P3 (judge) | Phase 2.5-P4 (exact) | Phase 2.5-P4 (judge) | Phase 3 (exact) | Phase 3 (judge) | Next Fix |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| short-input | 7/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | 8/12 | 11/12 | 8/12 | 9/12 | 8/12 | 9/12 | Punct model + grammar-only LLM prompt + context injection |
-| fillers | 3/15 | 10/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 11/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
-| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | **9/12** | **11/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | ✅ Done |
-| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 5/10 | 2/10 | 4/10 | Punct model (Hindi Danda F1 96-97%) + Whisper prompt tuning |
-| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | 4/10 | 6/10 | 4/10 | 6/10 | **5/10** | **7/10** | 5/10 | 6/10 | Whisper prompt conditioning (in place, benefit shows with real ASR) |
-| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | ✅ Done |
-| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 1/5 | 2/5 | 1/5 | 2/5 | Accept remaining for LLM; punct model (token classifier) immune |
-| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | **5/10** | **7/10** | 5/10 | 7/10 | 6/10 | 7/10 | 3 remaining need larger model or "well actually" |
-| single-line | 1/5 | 0/5 | 3/5 | 3/5 | 2/5 | 4/5 | 2/5 | 4/5 | **4/5** | **5/5** | 4/5 | 5/5 | ✅ Done |
+| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Phase 2.5-P2 (exact) | Phase 2.5-P2 (judge) | Phase 2.5-P3 (exact) | Phase 2.5-P3 (judge) | Phase 2.5-P4 (exact) | Phase 2.5-P4 (judge) | Phase 3 (exact) | Phase 3 (judge) | Ph4-S1 (exact) | Ph4-S1 (judge) | Next Fix |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| short-input | 7/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | 8/12 | 11/12 | 8/12 | 9/12 | 8/12 | 9/12 | 8/12 | 11/12 | Punct model + grammar-only LLM prompt + context injection |
+| fillers | 3/15 | 10/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 11/15 | 10/15 | 12/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
+| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | **9/12** | **11/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | ✅ Done |
+| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 5/10 | 2/10 | 4/10 | 2/10 | 5/10 | Punct model (Hindi Danda F1 96-97%) + Whisper prompt tuning |
+| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | 4/10 | 6/10 | 4/10 | 6/10 | **5/10** | **7/10** | 5/10 | 6/10 | 5/10 | 6/10 | Whisper prompt conditioning (in place, benefit shows with real ASR) |
+| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | ✅ Done |
+| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 1/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | Accept remaining for LLM; punct model (token classifier) immune |
+| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | **5/10** | **7/10** | 5/10 | 7/10 | 6/10 | 7/10 | 6/10 | 7/10 | 3 remaining need larger model or "well actually" |
+| single-line | 1/5 | 0/5 | 3/5 | 3/5 | 2/5 | 4/5 | 2/5 | 4/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | ✅ Done |
 
 ---
 
