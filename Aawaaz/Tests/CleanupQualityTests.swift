@@ -938,6 +938,7 @@ final class CleanupQualityTests: XCTestCase {
         let testCase: CleanupTestCase
         let afterSelfCorrection: String
         let afterFillers: String
+        let afterSpokenForms: String
         let afterLLM: String
         let passed: Bool
         let llmLatency: TimeInterval
@@ -948,7 +949,6 @@ final class CleanupQualityTests: XCTestCase {
     func testCleanupQualityRegression() async throws {
         try XCTSkipIf(skipTest, "Set RUN_QUALITY_TESTS=1 to run the quality regression benchmark")
 
-        let textProcessor = TextProcessor()
         let llmProcessor = LocalLLMProcessor()
         let config = TextProcessingConfig.default
 
@@ -961,29 +961,22 @@ final class CleanupQualityTests: XCTestCase {
 
         var results: [CaseResult] = []
 
+        let fillerWordRemover = FillerWordRemover()
+        let selfCorrectionDetector = SelfCorrectionDetector()
+
         for tc in Self.testCases {
-            // Stage 1: Deterministic self-correction
-            let scConfig = TextProcessingConfig(
-                fillerRemovalEnabled: false,
-                selfCorrectionEnabled: config.selfCorrectionEnabled,
-                fillerWords: config.fillerWords
+            // Stages 1-3: Deterministic pipeline (self-correction → fillers → spoken forms)
+            let stages = runDeterministicStages(
+                input: tc.input, context: tc.context, fillerWords: config.fillerWords,
+                selfCorrectionDetector: selfCorrectionDetector, fillerWordRemover: fillerWordRemover
             )
-            let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig, context: tc.context)
 
-            // Stage 2: Filler removal
-            let frConfig = TextProcessingConfig(
-                fillerRemovalEnabled: config.fillerRemovalEnabled,
-                selfCorrectionEnabled: false,
-                fillerWords: config.fillerWords
-            )
-            let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig, context: tc.context)
-
-            // Stage 3: LLM cleanup
+            // Stage 4: LLM cleanup
             let llmStart = CFAbsoluteTimeGetCurrent()
             let afterLLM: String
             do {
                 afterLLM = try await llmProcessor.process(
-                    rawText: afterFillers,
+                    rawText: stages.afterSpokenForms,
                     context: tc.context,
                     cleanupLevel: tc.cleanupLevel
                 )
@@ -997,8 +990,9 @@ final class CleanupQualityTests: XCTestCase {
 
             let result = CaseResult(
                 testCase: tc,
-                afterSelfCorrection: afterSelfCorrection,
-                afterFillers: afterFillers,
+                afterSelfCorrection: stages.afterSelfCorrection,
+                afterFillers: stages.afterFillers,
+                afterSpokenForms: stages.afterSpokenForms,
                 afterLLM: afterLLM,
                 passed: passed,
                 llmLatency: llmLatency
@@ -1009,8 +1003,9 @@ final class CleanupQualityTests: XCTestCase {
             let icon = passed ? "✅" : "❌"
             print("━━━ [\(tc.id)] Category: \(tc.category) ━━━")
             print("  INPUT:           \"\(tc.input)\"")
-            print("  AFTER SELF-CORR: \"\(afterSelfCorrection)\"")
-            print("  AFTER FILLERS:   \"\(afterFillers)\"")
+            print("  AFTER SELF-CORR: \"\(stages.afterSelfCorrection)\"")
+            print("  AFTER FILLERS:   \"\(stages.afterFillers)\"")
+            print("  AFTER SPKN-FRM:  \"\(stages.afterSpokenForms)\"")
             print("  AFTER LLM:       \"\(afterLLM)\"")
             print("  EXPECTED:        \"\(tc.expected)\"")
             print("  RESULT:          \(icon) \(passed ? "PASS" : "FAIL")")
@@ -1086,6 +1081,57 @@ final class CleanupQualityTests: XCTestCase {
         print("\n[Deterministic] Passed: \(passed) of \(deterministicCases.count) cases\n")
     }
 
+    // MARK: - Pipeline Stage Helpers
+
+    /// Run the deterministic pipeline stages individually, returning each
+    /// intermediate result for tracing. Mirrors the production order in
+    /// `TextProcessor.process()` but calls each component directly so that
+    /// spoken-form normalization is visible as a separate stage.
+    ///
+    /// Keep in sync with `TextProcessor.process()` if the pipeline changes.
+    private struct DeterministicStageResult {
+        let afterSelfCorrection: String
+        let afterFillers: String
+        let afterSpokenForms: String
+    }
+
+    private func runDeterministicStages(
+        input: String,
+        context: InsertionContext,
+        fillerWords: [String],
+        selfCorrectionDetector: SelfCorrectionDetector,
+        fillerWordRemover: FillerWordRemover
+    ) -> DeterministicStageResult {
+        // Stage 1: Self-correction
+        var afterSelfCorrection = selfCorrectionDetector.detectAndResolve(input)
+        // Capitalize after significant self-correction in non-code contexts
+        // (mirrors TextProcessor.process() capitalization logic)
+        let isCodeTerminal = context.appCategory == .code || context.appCategory == .terminal
+        if !isCodeTerminal {
+            let beforeWords = input.split(whereSeparator: \.isWhitespace).count
+            let afterWords = afterSelfCorrection.split(whereSeparator: \.isWhitespace).count
+            if beforeWords > 0, afterWords > 0,
+               Double(afterWords) / Double(beforeWords) <= 0.5,
+               let first = afterSelfCorrection.first, first.isLowercase {
+                afterSelfCorrection = first.uppercased() + afterSelfCorrection.dropFirst()
+            }
+        }
+
+        // Stage 2: Filler removal
+        let afterFillers = fillerWordRemover.removeFillers(
+            from: afterSelfCorrection, fillerWords: fillerWords
+        )
+
+        // Stage 3: Spoken-form normalization
+        let afterSpokenForms = SpokenFormNormalizer.normalize(afterFillers, unambiguousOnly: isCodeTerminal)
+
+        return DeterministicStageResult(
+            afterSelfCorrection: afterSelfCorrection,
+            afterFillers: afterFillers,
+            afterSpokenForms: afterSpokenForms
+        )
+    }
+
     // MARK: - Summary Printer
 
     private func printSummary(results: [CaseResult]) {
@@ -1159,7 +1205,6 @@ final class CleanupQualityTests: XCTestCase {
             CandidateModel(name: "Qwen3-1.7B-4bit", huggingFaceID: "mlx-community/Qwen3-1.7B-4bit", sizeLabel: "~1.2GB"),
         ]
 
-        let textProcessor = TextProcessor()
         let config = TextProcessingConfig.default
         let llmProcessor = LocalLLMProcessor()
 
@@ -1201,30 +1246,22 @@ final class CleanupQualityTests: XCTestCase {
             print("  Model loaded in \(String(format: "%.2f", loadTime))s\n")
 
             var caseResults: [CaseResult] = []
+            let fillerWordRemover = FillerWordRemover()
+            let selfCorrectionDetector = SelfCorrectionDetector()
 
             for tc in Self.testCases {
-                // Stage 1: Deterministic self-correction
-                let scConfig = TextProcessingConfig(
-                    fillerRemovalEnabled: false,
-                    selfCorrectionEnabled: config.selfCorrectionEnabled,
-                    fillerWords: config.fillerWords
+                // Stages 1-3: Deterministic pipeline
+                let stages = runDeterministicStages(
+                    input: tc.input, context: tc.context, fillerWords: config.fillerWords,
+                    selfCorrectionDetector: selfCorrectionDetector, fillerWordRemover: fillerWordRemover
                 )
-                let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig, context: tc.context)
 
-                // Stage 2: Filler removal
-                let frConfig = TextProcessingConfig(
-                    fillerRemovalEnabled: config.fillerRemovalEnabled,
-                    selfCorrectionEnabled: false,
-                    fillerWords: config.fillerWords
-                )
-                let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig, context: tc.context)
-
-                // Stage 3: LLM cleanup
+                // Stage 4: LLM cleanup
                 let llmStart = CFAbsoluteTimeGetCurrent()
                 let afterLLM: String
                 do {
                     afterLLM = try await llmProcessor.process(
-                        rawText: afterFillers, context: tc.context, cleanupLevel: tc.cleanupLevel
+                        rawText: stages.afterSpokenForms, context: tc.context, cleanupLevel: tc.cleanupLevel
                     )
                 } catch {
                     afterLLM = "(LLM error: \(error.localizedDescription))"
@@ -1235,8 +1272,9 @@ final class CleanupQualityTests: XCTestCase {
                     == tc.expected.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 caseResults.append(CaseResult(
-                    testCase: tc, afterSelfCorrection: afterSelfCorrection,
-                    afterFillers: afterFillers, afterLLM: afterLLM,
+                    testCase: tc, afterSelfCorrection: stages.afterSelfCorrection,
+                    afterFillers: stages.afterFillers, afterSpokenForms: stages.afterSpokenForms,
+                    afterLLM: afterLLM,
                     passed: passed, llmLatency: llmLatency
                 ))
 
