@@ -656,7 +656,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-1",
                 category: "short-input",
                 input: "yes",
-                expected: "yes",
+                expected: "Yes",
                 cleanupLevel: .medium,
                 context: def
             ),
@@ -664,7 +664,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-2",
                 category: "short-input",
                 input: "sounds good",
-                expected: "sounds good",
+                expected: "Sounds good",
                 cleanupLevel: .medium,
                 context: def
             ),
@@ -672,7 +672,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-3",
                 category: "short-input",
                 input: "thank you",
-                expected: "thank you",
+                expected: "Thank you",
                 cleanupLevel: .medium,
                 context: def
             ),
@@ -680,7 +680,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-4",
                 category: "short-input",
                 input: "okay",
-                expected: "okay",
+                expected: "Okay",
                 cleanupLevel: .medium,
                 context: def
             ),
@@ -688,7 +688,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-5",
                 category: "short-input",
                 input: "not sure",
-                expected: "not sure",
+                expected: "Not sure",
                 cleanupLevel: .medium,
                 context: def
             ),
@@ -696,7 +696,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-6",
                 category: "short-input",
                 input: "hi there",
-                expected: "hi there",
+                expected: "Hi there",
                 cleanupLevel: .medium,
                 context: chat
             ),
@@ -704,7 +704,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-7",
                 category: "short-input",
                 input: "on it",
-                expected: "on it",
+                expected: "On it",
                 cleanupLevel: .medium,
                 context: chat
             ),
@@ -712,7 +712,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "short-8",
                 category: "short-input",
                 input: "done",
-                expected: "done",
+                expected: "Done",
                 cleanupLevel: .medium,
                 context: def
             ),
@@ -849,7 +849,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "singleline-1",
                 category: "single-line",
                 input: "this is a subject line for an email about the quarterly review",
-                expected: "This is a subject line for an email about the quarterly review",
+                expected: "This is a subject line for an email about the quarterly review.",
                 cleanupLevel: .medium,
                 context: single
             ),
@@ -857,7 +857,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "singleline-2",
                 category: "single-line",
                 input: "meeting with john tomorrow at 3pm",
-                expected: "Meeting with John tomorrow at 3pm",
+                expected: "Meeting with John tomorrow at 3pm.",
                 cleanupLevel: .medium,
                 context: single
             ),
@@ -865,7 +865,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "singleline-3",
                 category: "single-line",
                 input: "re colon um project update for q4",
-                expected: "Re: project update for Q4",
+                expected: "Re: Project update for Q4.",
                 cleanupLevel: .medium,
                 context: single
             ),
@@ -873,7 +873,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "singleline-4",
                 category: "single-line",
                 input: "search for best restaurants near me",
-                expected: "search for best restaurants near me",
+                expected: "Search for best restaurants near me.",
                 cleanupLevel: .light,
                 context: single
             ),
@@ -881,7 +881,7 @@ final class CleanupQualityTests: XCTestCase {
                 id: "singleline-5",
                 category: "single-line",
                 input: "um bug report colon app crashes on startup",
-                expected: "Bug report: app crashes on startup",
+                expected: "Bug report: App crashes on startup.",
                 cleanupLevel: .medium,
                 context: single
             ),
@@ -968,7 +968,7 @@ final class CleanupQualityTests: XCTestCase {
                 selfCorrectionEnabled: config.selfCorrectionEnabled,
                 fillerWords: config.fillerWords
             )
-            let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig)
+            let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig, context: tc.context)
 
             // Stage 2: Filler removal
             let frConfig = TextProcessingConfig(
@@ -976,7 +976,7 @@ final class CleanupQualityTests: XCTestCase {
                 selfCorrectionEnabled: false,
                 fillerWords: config.fillerWords
             )
-            let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig)
+            let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig, context: tc.context)
 
             // Stage 3: LLM cleanup
             let llmStart = CFAbsoluteTimeGetCurrent()
@@ -1209,7 +1209,7 @@ final class CleanupQualityTests: XCTestCase {
                     selfCorrectionEnabled: config.selfCorrectionEnabled,
                     fillerWords: config.fillerWords
                 )
-                let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig)
+                let afterSelfCorrection = textProcessor.process(tc.input, config: scConfig, context: tc.context)
 
                 // Stage 2: Filler removal
                 let frConfig = TextProcessingConfig(
@@ -1217,7 +1217,7 @@ final class CleanupQualityTests: XCTestCase {
                     selfCorrectionEnabled: false,
                     fillerWords: config.fillerWords
                 )
-                let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig)
+                let afterFillers = textProcessor.process(afterSelfCorrection, config: frConfig, context: tc.context)
 
                 // Stage 3: LLM cleanup
                 let llmStart = CFAbsoluteTimeGetCurrent()

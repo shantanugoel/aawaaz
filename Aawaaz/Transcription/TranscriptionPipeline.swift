@@ -426,7 +426,7 @@ final class TranscriptionPipeline {
         // The deterministic detector reliably handles explicit markers
         // (e.g. "scratch that", "actually no"). The LLM then cleans up
         // whatever the detector outputs — no duplication, no confusion.
-        let preLLMText = textProcessor.process(text, config: config)
+        let preLLMText = textProcessor.process(text, config: config, context: context)
 
         // Step 3: LLM post-processing (if enabled AND model is downloaded)
         let processor: PostProcessor = llmAvailable ? llmProcessor : noOpProcessor

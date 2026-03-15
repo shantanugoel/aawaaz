@@ -63,16 +63,22 @@ actor LocalLLMProcessor: PostProcessor {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return rawText }
 
-        // Very short inputs: deterministic cleanup is sufficient
-        let wordCount = trimmed.split(whereSeparator: \.isWhitespace).count
-        if wordCount < 4 {
-            return rawText
-        }
-
-        // Code/terminal fields: skip LLM unless in Full cleanup mode
+        // Code/terminal fields: skip LLM (and capitalization) unless in Full cleanup mode.
+        // Must run before short-input bypass to avoid capitalizing commands like "git status".
         if cleanupLevel != .full,
            (context.appCategory == .code || context.appCategory == .terminal) {
             return rawText
+        }
+
+        // Very short inputs: deterministic cleanup is sufficient.
+        // Still capitalize the first letter for proper sentence presentation.
+        let wordCount = trimmed.split(whereSeparator: \.isWhitespace).count
+        if wordCount < 4 {
+            var result = trimmed
+            if let first = result.first, first.isLowercase {
+                result = first.uppercased() + result.dropFirst()
+            }
+            return result
         }
 
         let container = try await ensureModelLoaded()

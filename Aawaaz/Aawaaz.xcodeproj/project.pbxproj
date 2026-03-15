@@ -51,6 +51,7 @@
 		AA000064 /* PostProcessingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100064 /* PostProcessingMode.swift */; };
 		AA000070 /* PostProcessingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100070 /* PostProcessingSettingsView.swift */; };
 		AA000071 /* DevanagariTransliterator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100071 /* DevanagariTransliterator.swift */; };
+		AA000080 /* SpokenFormNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100080 /* SpokenFormNormalizer.swift */; };
 		AA000022 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA900030 /* MLXLLM */; };
 		AA000023 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = AA900031 /* MLXLMCommon */; };
 		AA000024 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA900032 /* MLXVLM */; };
@@ -67,6 +68,7 @@
 		AAT00011 /* CleanupLevelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10011 /* CleanupLevelTests.swift */; };
 		AAT00012 /* DevanagariTransliteratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10012 /* DevanagariTransliteratorTests.swift */; };
 		AAT00013 /* CleanupQualityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10013 /* CleanupQualityTests.swift */; };
+		AAT00014 /* SpokenFormNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10014 /* SpokenFormNormalizerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -116,6 +118,7 @@
 		AA100064 /* PostProcessingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostProcessingMode.swift; sourceTree = "<group>"; };
 		AA100070 /* PostProcessingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostProcessingSettingsView.swift; sourceTree = "<group>"; };
 		AA100071 /* DevanagariTransliterator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevanagariTransliterator.swift; sourceTree = "<group>"; };
+		AA100080 /* SpokenFormNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenFormNormalizer.swift; sourceTree = "<group>"; };
 		AAT10001 /* VADStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADStateTests.swift; sourceTree = "<group>"; };
 		AAT10002 /* HotkeyConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfigurationTests.swift; sourceTree = "<group>"; };
 		AAT10003 /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
@@ -129,6 +132,7 @@
 		AAT10011 /* CleanupLevelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupLevelTests.swift; sourceTree = "<group>"; };
 		AAT10012 /* DevanagariTransliteratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevanagariTransliteratorTests.swift; sourceTree = "<group>"; };
 		AAT10013 /* CleanupQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupQualityTests.swift; sourceTree = "<group>"; };
+		AAT10014 /* SpokenFormNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenFormNormalizerTests.swift; sourceTree = "<group>"; };
 		AAT10100 /* AawaazTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AawaazTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -310,6 +314,7 @@
 				AAT10011 /* CleanupLevelTests.swift */,
 				AAT10012 /* DevanagariTransliteratorTests.swift */,
 				AAT10013 /* CleanupQualityTests.swift */,
+				AAT10014 /* SpokenFormNormalizerTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -324,6 +329,7 @@
 				AA100054 /* PostProcessor.swift */,
 				AA100055 /* NoOpProcessor.swift */,
 				AA100071 /* DevanagariTransliterator.swift */,
+				AA100080 /* SpokenFormNormalizer.swift */,
 			);
 			path = TextProcessing;
 			sourceTree = "<group>";
@@ -503,6 +509,7 @@
 				AA000064 /* PostProcessingMode.swift in Sources */,
 				AA000070 /* PostProcessingSettingsView.swift in Sources */,
 				AA000071 /* DevanagariTransliterator.swift in Sources */,
+				AA000080 /* SpokenFormNormalizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -523,12 +530,11 @@
 				AAT00011 /* CleanupLevelTests.swift in Sources */,
 				AAT00012 /* DevanagariTransliteratorTests.swift in Sources */,
 				AAT00013 /* CleanupQualityTests.swift in Sources */,
+				AAT00014 /* SpokenFormNormalizerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin XCBuildConfiguration section */
 		AA700001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
