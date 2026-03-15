@@ -52,6 +52,8 @@
 		AA000070 /* PostProcessingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100070 /* PostProcessingSettingsView.swift */; };
 		AA000071 /* DevanagariTransliterator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100071 /* DevanagariTransliterator.swift */; };
 		AA000080 /* SpokenFormNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100080 /* SpokenFormNormalizer.swift */; };
+		AA000081 /* SentencePieceTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100081 /* SentencePieceTokenizer.swift */; };
+		AA000082 /* PunctuationModelRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100082 /* PunctuationModelRunner.swift */; };
 		AA000022 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA900030 /* MLXLLM */; };
 		AA000023 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = AA900031 /* MLXLMCommon */; };
 		AA000024 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA900032 /* MLXVLM */; };
@@ -70,6 +72,8 @@
 		AAT00013 /* CleanupQualityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10013 /* CleanupQualityTests.swift */; };
 		AAT00014 /* SpokenFormNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10014 /* SpokenFormNormalizerTests.swift */; };
 		AAT00015 /* LocalLLMProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10015 /* LocalLLMProcessorTests.swift */; };
+		AAT00016 /* SentencePieceTokenizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10016 /* SentencePieceTokenizerTests.swift */; };
+		AAT00017 /* PunctuationModelRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAT10017 /* PunctuationModelRunnerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -120,6 +124,8 @@
 		AA100070 /* PostProcessingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostProcessingSettingsView.swift; sourceTree = "<group>"; };
 		AA100071 /* DevanagariTransliterator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevanagariTransliterator.swift; sourceTree = "<group>"; };
 		AA100080 /* SpokenFormNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenFormNormalizer.swift; sourceTree = "<group>"; };
+		AA100081 /* SentencePieceTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentencePieceTokenizer.swift; sourceTree = "<group>"; };
+		AA100082 /* PunctuationModelRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationModelRunner.swift; sourceTree = "<group>"; };
 		AAT10001 /* VADStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VADStateTests.swift; sourceTree = "<group>"; };
 		AAT10002 /* HotkeyConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfigurationTests.swift; sourceTree = "<group>"; };
 		AAT10003 /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
@@ -135,6 +141,8 @@
 		AAT10013 /* CleanupQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupQualityTests.swift; sourceTree = "<group>"; };
 		AAT10014 /* SpokenFormNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenFormNormalizerTests.swift; sourceTree = "<group>"; };
 		AAT10015 /* LocalLLMProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMProcessorTests.swift; sourceTree = "<group>"; };
+		AAT10016 /* SentencePieceTokenizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentencePieceTokenizerTests.swift; sourceTree = "<group>"; };
+		AAT10017 /* PunctuationModelRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationModelRunnerTests.swift; sourceTree = "<group>"; };
 		AAT10100 /* AawaazTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AawaazTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -250,6 +258,8 @@
 			children = (
 				AA100015 /* ModelManager.swift */,
 				AA100016 /* ModelCatalog.swift */,
+				AA100081 /* SentencePieceTokenizer.swift */,
+				AA100082 /* PunctuationModelRunner.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -318,6 +328,8 @@
 				AAT10013 /* CleanupQualityTests.swift */,
 				AAT10014 /* SpokenFormNormalizerTests.swift */,
 				AAT10015 /* LocalLLMProcessorTests.swift */,
+				AAT10016 /* SentencePieceTokenizerTests.swift */,
+				AAT10017 /* PunctuationModelRunnerTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -513,6 +525,8 @@
 				AA000070 /* PostProcessingSettingsView.swift in Sources */,
 				AA000071 /* DevanagariTransliterator.swift in Sources */,
 				AA000080 /* SpokenFormNormalizer.swift in Sources */,
+				AA000081 /* SentencePieceTokenizer.swift in Sources */,
+				AA000082 /* PunctuationModelRunner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -535,6 +549,8 @@
 				AAT00013 /* CleanupQualityTests.swift in Sources */,
 				AAT00014 /* SpokenFormNormalizerTests.swift in Sources */,
 				AAT00015 /* LocalLLMProcessorTests.swift in Sources */,
+				AAT00016 /* SentencePieceTokenizerTests.swift in Sources */,
+				AAT00017 /* PunctuationModelRunnerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

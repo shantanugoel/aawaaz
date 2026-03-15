@@ -939,8 +939,10 @@ final class CleanupQualityTests: XCTestCase {
         let afterSelfCorrection: String
         let afterFillers: String
         let afterSpokenForms: String
+        let afterPunct: String
         let afterLLM: String
         let passed: Bool
+        let punctLatency: TimeInterval
         let llmLatency: TimeInterval
     }
 
@@ -950,6 +952,7 @@ final class CleanupQualityTests: XCTestCase {
         try XCTSkipIf(skipTest, "Set RUN_QUALITY_TESTS=1 to run the quality regression benchmark")
 
         let llmProcessor = LocalLLMProcessor()
+        let punctRunner = PunctuationModelRunner()
         let config = TextProcessingConfig.default
 
         // Ensure the model is loaded before starting
@@ -958,6 +961,18 @@ final class CleanupQualityTests: XCTestCase {
         try await llmProcessor.loadModel()
         let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
         print("Model loaded in \(String(format: "%.2f", loadTime))s\n")
+
+        // Load punct model if available
+        let punctAvailable = PunctuationModelRunner.isAvailable
+        if punctAvailable {
+            print("━━━ Loading Punctuation model… ━━━\n")
+            let punctLoadStart = CFAbsoluteTimeGetCurrent()
+            try await punctRunner.loadModel(useANE: true)
+            let punctLoadTime = CFAbsoluteTimeGetCurrent() - punctLoadStart
+            print("Punct model loaded in \(String(format: "%.2f", punctLoadTime))s\n")
+        } else {
+            print("━━━ Punct model not available, skipping punct stage ━━━\n")
+        }
 
         var results: [CaseResult] = []
 
@@ -971,12 +986,29 @@ final class CleanupQualityTests: XCTestCase {
                 selfCorrectionDetector: selfCorrectionDetector, fillerWordRemover: fillerWordRemover
             )
 
-            // Stage 4: LLM cleanup
+            // Stage 4: Punctuation model (skip for code/terminal)
+            let isCodeTerminal = tc.context.appCategory == .code || tc.context.appCategory == .terminal
+            let afterPunct: String
+            var punctLatency: TimeInterval = 0
+            if punctAvailable && !isCodeTerminal {
+                let punctStart = CFAbsoluteTimeGetCurrent()
+                do {
+                    afterPunct = try await punctRunner.predict(stages.afterSpokenForms)
+                } catch {
+                    afterPunct = stages.afterSpokenForms
+                    print("  [Punct error: \(error.localizedDescription)]")
+                }
+                punctLatency = CFAbsoluteTimeGetCurrent() - punctStart
+            } else {
+                afterPunct = stages.afterSpokenForms
+            }
+
+            // Stage 5: LLM cleanup
             let llmStart = CFAbsoluteTimeGetCurrent()
             let afterLLM: String
             do {
                 afterLLM = try await llmProcessor.process(
-                    rawText: stages.afterSpokenForms,
+                    rawText: afterPunct,
                     context: tc.context,
                     cleanupLevel: tc.cleanupLevel
                 )
@@ -993,8 +1025,10 @@ final class CleanupQualityTests: XCTestCase {
                 afterSelfCorrection: stages.afterSelfCorrection,
                 afterFillers: stages.afterFillers,
                 afterSpokenForms: stages.afterSpokenForms,
+                afterPunct: afterPunct,
                 afterLLM: afterLLM,
                 passed: passed,
+                punctLatency: punctLatency,
                 llmLatency: llmLatency
             )
             results.append(result)
@@ -1006,13 +1040,17 @@ final class CleanupQualityTests: XCTestCase {
             print("  AFTER SELF-CORR: \"\(stages.afterSelfCorrection)\"")
             print("  AFTER FILLERS:   \"\(stages.afterFillers)\"")
             print("  AFTER SPKN-FRM:  \"\(stages.afterSpokenForms)\"")
+            if punctAvailable && !isCodeTerminal {
+                print("  AFTER PUNCT:     \"\(afterPunct)\"")
+                print("  PUNCT LATENCY:   \(String(format: "%.2f", punctLatency))s")
+            }
             print("  AFTER LLM:       \"\(afterLLM)\"")
             print("  EXPECTED:        \"\(tc.expected)\"")
             print("  RESULT:          \(icon) \(passed ? "PASS" : "FAIL")")
             if !passed {
                 print("  DIFF:            Expected \"\(tc.expected)\" but got \"\(afterLLM)\"")
             }
-            print("  LATENCY:         \(String(format: "%.2f", llmLatency))s")
+            print("  LLM LATENCY:     \(String(format: "%.2f", llmLatency))s")
             print("")
         }
 
@@ -1138,33 +1176,46 @@ final class CleanupQualityTests: XCTestCase {
         let categories = Dictionary(grouping: results) { $0.testCase.category }
         let sortedCategories = categories.keys.sorted()
 
+        let hasPunct = results.contains { $0.punctLatency > 0 }
+        let headerSuffix = hasPunct ? " \(pad("Avg Punct", 11)) \(pad("Avg LLM", 11))" : " \(pad("Avg Latency", 11))"
         print("━━━ QUALITY REGRESSION SUMMARY ━━━")
-        print("\(pad("Category", 25)) \(pad("Total", 5)) \(pad("Pass", 5)) \(pad("Fail", 5)) \(pad("Avg Latency", 11))")
-        print(String(repeating: "─", count: 55))
+        print("\(pad("Category", 25)) \(pad("Total", 5)) \(pad("Pass", 5)) \(pad("Fail", 5))\(headerSuffix)")
+        let lineLen = hasPunct ? 77 : 55
+        print(String(repeating: "─", count: lineLen))
 
         var totalCount = 0
         var totalPassed = 0
         var totalFailed = 0
-        var totalLatency: TimeInterval = 0
+        var totalPunctLatency: TimeInterval = 0
+        var totalLLMLatency: TimeInterval = 0
 
         for category in sortedCategories {
             let cases = categories[category]!
             let count = cases.count
             let passCount = cases.filter(\.passed).count
             let failCount = count - passCount
-            let avgLatency = cases.map(\.llmLatency).reduce(0, +) / Double(count)
+            let avgPunctLatency = cases.map(\.punctLatency).reduce(0, +) / Double(count)
+            let avgLLMLatency = cases.map(\.llmLatency).reduce(0, +) / Double(count)
 
             totalCount += count
             totalPassed += passCount
             totalFailed += failCount
-            totalLatency += cases.map(\.llmLatency).reduce(0, +)
+            totalPunctLatency += cases.map(\.punctLatency).reduce(0, +)
+            totalLLMLatency += cases.map(\.llmLatency).reduce(0, +)
 
-            print("\(pad(category, 25)) \(pad("\(count)", 5)) \(pad("\(passCount)", 5)) \(pad("\(failCount)", 5)) \(pad(String(format: "%.2fs", avgLatency), 11))")
+            let latencySuffix = hasPunct
+                ? " \(pad(String(format: "%.2fs", avgPunctLatency), 11)) \(pad(String(format: "%.2fs", avgLLMLatency), 11))"
+                : " \(pad(String(format: "%.2fs", avgLLMLatency), 11))"
+            print("\(pad(category, 25)) \(pad("\(count)", 5)) \(pad("\(passCount)", 5)) \(pad("\(failCount)", 5))\(latencySuffix)")
         }
 
-        let overallAvgLatency = totalCount > 0 ? totalLatency / Double(totalCount) : 0
-        print(String(repeating: "─", count: 55))
-        print("\(pad("TOTAL", 25)) \(pad("\(totalCount)", 5)) \(pad("\(totalPassed)", 5)) \(pad("\(totalFailed)", 5)) \(pad(String(format: "%.2fs", overallAvgLatency), 11))")
+        let overallAvgPunct = totalCount > 0 ? totalPunctLatency / Double(totalCount) : 0
+        let overallAvgLLM = totalCount > 0 ? totalLLMLatency / Double(totalCount) : 0
+        print(String(repeating: "─", count: lineLen))
+        let totalLatencySuffix = hasPunct
+            ? " \(pad(String(format: "%.2fs", overallAvgPunct), 11)) \(pad(String(format: "%.2fs", overallAvgLLM), 11))"
+            : " \(pad(String(format: "%.2fs", overallAvgLLM), 11))"
+        print("\(pad("TOTAL", 25)) \(pad("\(totalCount)", 5)) \(pad("\(totalPassed)", 5)) \(pad("\(totalFailed)", 5))\(totalLatencySuffix)")
     }
 
     private func pad(_ string: String, _ width: Int) -> String {
@@ -1274,8 +1325,9 @@ final class CleanupQualityTests: XCTestCase {
                 caseResults.append(CaseResult(
                     testCase: tc, afterSelfCorrection: stages.afterSelfCorrection,
                     afterFillers: stages.afterFillers, afterSpokenForms: stages.afterSpokenForms,
+                    afterPunct: stages.afterSpokenForms,
                     afterLLM: afterLLM,
-                    passed: passed, llmLatency: llmLatency
+                    passed: passed, punctLatency: 0, llmLatency: llmLatency
                 ))
 
                 let icon = passed ? "✅" : "❌"

@@ -1,8 +1,8 @@
 # LLM Cleanup Quality Plan: 47% → 85%+
 
-## Current State (after Phase 0-1-2-2.5-3 implementation)
+## Current State (after Phase 0-1-2-2.5-3-4S2 implementation)
 
-The example-driven prompt redesign moved pass rate from **17% → 47%** on the 100-case benchmark. Phase 0-1-2 implementation (LLM-as-Judge, pipeline fixes, SpokenFormNormalizer) moved the measured scores to **50% exact-match, 61% judge pass rate**. Phase 2.5 (stabilization + deterministic fixes) moved scores to **64% exact-match, 79% judge pass rate**. Phase 3 (Whisper prompt conditioning + surrounding text context injection) maintains scores at **65% exact-match, 78% judge pass rate** — context infrastructure is in place without regression, with benefits expected in production (benchmark tests don't have surrounding text). Current best config: **Qwen 3 0.6B, 0.31s avg latency, ~1 GB RAM**.
+The example-driven prompt redesign moved pass rate from **17% → 47%** on the 100-case benchmark. Phase 0-1-2 implementation (LLM-as-Judge, pipeline fixes, SpokenFormNormalizer) moved the measured scores to **50% exact-match, 61% judge pass rate**. Phase 2.5 (stabilization + deterministic fixes) moved scores to **64% exact-match, 79% judge pass rate**. Phase 3 (Whisper prompt conditioning + surrounding text context injection) maintains scores at **65% exact-match, 78% judge pass rate**. Phase 4 Step 2 (punctuation model Swift integration) moved scores to **61% exact-match, 84% judge pass rate** — exact match dropped slightly (expected outputs were tuned pre-punct-model) but real quality improved significantly. Current best config: **Qwen 3 0.6B + xlm-roberta punct model, 0.31s LLM + 0.08s punct avg latency, ~2 GB RAM**.
 
 > **Benchmark note:** Phase 3 scores (65% exact, 78% judge) are from a clean run with all layers active. The context injection instruction is conditional — only included when surrounding text is present, so benchmark tests (which have no surrounding text) run with the same prompt as Phase 2.5-P4. Score fluctuations vs Phase 2.5-P4 (64/79) are within normal LLM variance for a 0.6B model.
 
@@ -1178,17 +1178,37 @@ Per-category changes (exact → judge):
     - Code/terminal guardrail: both models over-capitalize and add unwanted periods — spoken-form-only path (skip punct model) may be needed for code contexts
     - Candidate A's `<unk>` corruption is a dealbreaker — single-char words like "I" become `<unk>`, CamelCase like "getUserById" → "GET<UNK>SER<UNK>Y<UNK>D"
 
-**Step 2: Swift integration (1-2 days)**
+**Step 2: Swift integration (1-2 days)** ✅ COMPLETED
 
-20. Convert winner's ONNX to CoreML `.mlpackage` (for ANE acceleration) or use ONNX Runtime with CoreML execution provider
-21. Implement `PunctuationModelRunner.swift`:
-    - SentencePiece tokenizer integration (load `.model` file bundled with the ONNX)
-    - Sliding window logic: chunk input to 128-token windows with 32-token overlap, merge predictions by selecting from window center
-    - ONNX/CoreML inference call
-    - Label-to-text reconstruction (insert punctuation marks, apply truecasing)
-22. Integrate into pipeline between SpokenFormNormalizer and LLM in `TextProcessor`
-23. Simplify LLM prompt to grammar-only (remove punctuation/capitalization instructions)
-24. Run benchmark → expect **~80-83%**
+20. Used ONNX Runtime with CoreML execution provider (ANE acceleration) — model stays as ONNX, no CoreML conversion needed
+21. Implemented three new files:
+    - `SentencePieceTokenizer.swift` (~300 lines): Minimal Swift SentencePiece unigram tokenizer with protobuf parser, trie-based Viterbi encoding, NFKC normalization. Validated against 100 Python reference cases (15 golden tests).
+    - `PunctuationModelRunner.swift` (~400 lines): Actor wrapping ONNX Runtime inference. Handles model loading with CoreML EP for ANE, sliding window with 16-token overlap, prediction merging, text reconstruction matching Python PCSCollector exactly. ANE togglable via `punctuationModelUseANE` setting with automatic CPU fallback.
+    - `PunctuationModelRunnerTests.swift`: 6 tests including golden reference validation (6/6 match), latency measurement (~115ms CPU), ANE toggle reload, edge cases.
+22. Integrated into pipeline between SpokenFormNormalizer and LLM in `TranscriptionPipeline.postProcess()`:
+    - Skipped for code/terminal contexts (prevents over-capitalization/unwanted periods)
+    - Latency logged per inference with actual execution provider label
+    - Model files referenced from HuggingFace cache (`~/.cache/huggingface/hub/models--1-800-BAD-CODE--xlm-roberta_punctuation_fullstop_truecase/`)
+    - Required one-time model conversion: bool outputs → int32 (ONNX Runtime Swift bindings don't support bool tensor type)
+23. Softened LLM prompt: changed "Capitalize sentence starts…Add periods…" to "The text may already have punctuation and capitalization from a prior stage. Adjust only if clearly wrong."
+24. Added user settings: `punctuationModelEnabled` (default: true), `punctuationModelUseANE` (default: true) in AppState with UserDefaults persistence
+25. Benchmark results:
+
+    | Metric | Phase 3 (before) | Phase 4 Step 2 (after) | Delta |
+    |---|---|---|---|
+    | Exact Match | 65/100 (65%) | 61/100 (61%) | -4 |
+    | Judge Pass Rate | 78/100 (78%) | 84/100 (84%) | **+6** |
+    | Avg Punct Latency | — | 0.08s (CPU) | new |
+    | Avg LLM Latency | 0.31s | 0.31s | 0 |
+    | Real Failures (judge) | ~22 | 15 | **-7** |
+
+    **Key observations:**
+    - Exact match dropped 4 points because expected outputs were tuned to the pre-punct-model pipeline; the punct model produces slightly different (often better) formatting
+    - Judge pass rate improved +6 points: punct model handles capitalization and periods reliably, freeing the LLM to focus on grammar
+    - 15 real failures remain, primarily in: adversarial (4/5 fail), names-technical (6/10 fail), hinglish (3/10 fail)
+    - Punct model latency is ~80ms avg (CPU), acceptable as it runs in parallel with dictation pauses
+    - Short-input category: 0% exact match but 100% judge pass — model adds correct capitalization/periods that differ from hand-tuned expected outputs
+    - Code/terminal bypass works correctly: 8/8 pass with no punct model interference
 
 ### Phase 5: LFM2.5 Evaluation (half day)
 

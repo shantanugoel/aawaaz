@@ -385,6 +385,7 @@ final class TranscriptionPipeline {
     private let llmProcessor = LocalLLMProcessor()
     private let noOpProcessor = NoOpProcessor()
     private let transliterator = DevanagariTransliterator()
+    private let punctuationRunner = PunctuationModelRunner()
 
     /// Switch the LLM processor to a different model.
     ///
@@ -413,10 +414,10 @@ final class TranscriptionPipeline {
     /// Run the post-processing chain on accumulated text.
     ///
     /// Chain:
-    /// 1. Self-correction detection (Step 3.1)
-    /// 2. Filler word removal (Step 3.1)
-    /// 3. LLM cleanup when ``PostProcessingMode`` is `.local` and model is downloaded (Steps 3.3–3.5)
-    /// 4. Devanagari → Roman transliteration when LLM is off and Romanized script is selected (Step 3.7)
+    /// 1. Self-correction detection + filler removal + spoken-form normalization
+    /// 2. Punctuation model (punct + truecasing) — skipped for code/terminal
+    /// 3. LLM cleanup when ``PostProcessingMode`` is `.local` and model is downloaded
+    /// 4. Devanagari → Roman transliteration when LLM is off and Romanized script is selected
     ///
     /// If LLM processing fails or model is not downloaded, the pre-LLM result is used as fallback.
     private func postProcess(_ text: String, context: InsertionContext) async -> String {
@@ -427,17 +428,32 @@ final class TranscriptionPipeline {
         let hinglishScript = appState?.selectedHinglishScript ?? .romanized
         let llmAvailable = mode == .local
             && (appState?.llmModelManager.isDownloaded(appState?.selectedLLMModel ?? LLMModelCatalog.defaultModel) ?? false)
+        let punctEnabled = appState?.punctuationModelEnabled ?? true
+        let punctUseANE = appState?.punctuationModelUseANE ?? true
 
         // Determine script preference for Hinglish language only (Step 3.7)
         let scriptPreference: HinglishScript? = (language == .hinglish) ? hinglishScript : nil
 
-        // Step 1-2: Deterministic text processing
-        //
-        // Always run deterministic self-correction before LLM cleanup.
-        // The deterministic detector reliably handles explicit markers
-        // (e.g. "scratch that", "actually no"). The LLM then cleans up
-        // whatever the detector outputs — no duplication, no confusion.
+        // Step 1: Deterministic text processing (self-correction → fillers → spoken forms)
         let preLLMText = textProcessor.process(text, config: config, context: context)
+
+        // Step 2: Punctuation model (punct + truecasing)
+        // Skip for code/terminal contexts — the model over-capitalizes and adds unwanted periods.
+        let isCodeTerminal = context.appCategory == .code || context.appCategory == .terminal
+        var afterPunct = preLLMText
+
+        if punctEnabled && !isCodeTerminal && PunctuationModelRunner.isAvailable {
+            let punctStart = CFAbsoluteTimeGetCurrent()
+            do {
+                try await punctuationRunner.loadModel(useANE: punctUseANE)
+                afterPunct = try await punctuationRunner.predict(preLLMText)
+                let punctLatency = (CFAbsoluteTimeGetCurrent() - punctStart) * 1000
+                let epLabel = await punctuationRunner.usingCoreML ? "CoreML" : "CPU"
+                print("[Pipeline] Punct model: \(String(format: "%.1f", punctLatency))ms (\(epLabel))")
+            } catch {
+                print("[Pipeline] Punct model failed, skipping: \(error.localizedDescription)")
+            }
+        }
 
         // Step 3: LLM post-processing (if enabled AND model is downloaded)
         let processor: PostProcessor = llmAvailable ? llmProcessor : noOpProcessor
@@ -453,7 +469,7 @@ final class TranscriptionPipeline {
         var llmSucceeded = false
         do {
             result = try await processor.process(
-                rawText: preLLMText,
+                rawText: afterPunct,
                 context: context,
                 cleanupLevel: cleanupLevel,
                 scriptPreference: scriptPreference
@@ -461,7 +477,7 @@ final class TranscriptionPipeline {
             llmSucceeded = llmAvailable
         } catch {
             print("[Pipeline] LLM post-processing failed, using pre-LLM text: \(error.localizedDescription)")
-            result = preLLMText
+            result = afterPunct
         }
 
         // Step 4: Devanagari → Roman transliteration when LLM did not handle it (Step 3.7)

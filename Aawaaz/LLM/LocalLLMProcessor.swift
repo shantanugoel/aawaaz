@@ -315,8 +315,8 @@ actor LocalLLMProcessor: PostProcessor {
             The user gives you raw dictated text inside <text>...</text> tags.
             Return only the cleaned text. No tags, no explanations.
 
-            Capitalize sentence starts and proper nouns.
-            Add periods, question marks, commas, and sentence breaks where needed.
+            The text may already have punctuation and capitalization from a prior stage.
+            Adjust punctuation and capitalization only if clearly wrong.
             Fix small grammar mistakes.
             Keep the same meaning and almost the same words.
             Keep Hindi-English mix as-is. Keep Hindi spellings as-is.
