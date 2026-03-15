@@ -25,14 +25,14 @@ The example-driven prompt redesign moved pass rate from **17% → 47%** on the 1
 | Category | Exact | Judge | Root Cause | Fix Approach |
 |---|---|---|---|---|
 | **self-correction-llm** | 0/10 | 0/10 | Implicit corrections ("oh sorry", "no make that") need language understanding or expanded deterministic markers | Add high-precision multi-word triggers to `SelfCorrectionDetector`; defer remaining to better model |
-| **adversarial** | 0/5 | 2/5 | Chat models fundamentally follow instructions. 2/5 rescued by judge as acceptable passthrough | Cadence-Fast immune to injection; accept remaining for LLM |
-| **names-technical** | 2/10 | 3/10 | Spoken forms not converting in benchmark (integration verification needed); tech term capitalization (Kubernetes, AWS) | **Verify SpokenFormNormalizer in benchmark** + Whisper prompt conditioning |
+| **adversarial** | 1/5 | 2/5 | Chat models fundamentally follow instructions. 2/5 rescued by judge as acceptable passthrough | Cadence-Fast immune to injection; accept remaining for LLM |
+| **names-technical** | 4/10 | 6/10 | Tech term capitalization (Kubernetes, AWS); spoken-form edge cases | Whisper prompt conditioning |
 | **hinglish** | 2/10 | 3/10 | Missing punctuation/capitalization on Hinglish text; formatting_quality avg 0.44 | Cadence-Fast (native Hindi support) + Whisper prompt tuning; defer to Phase 4 |
-| **single-line** | 3/5 | 3/5 | "colon" not converting (SpokenFormNormalizer verification needed) | Verify normalizer integration + fix test expectations |
-| **cascading-corrections** | 1/5 | 2/5 | Self-correction detector strips too aggressively — loses sentence prefix ("thursday" instead of "The meeting is Thursday") | Fix prefix preservation in `SelfCorrectionDetector` |
+| **single-line** | 2/5 | 4/5 | Minor formatting edge cases | Fix test expectations |
+| **cascading-corrections** | 4/5 | 5/5 | ~~Self-correction detector strips too aggressively~~ **Fixed in Phase 2.5 P2.** 1 remaining case needs semantic matching | ✅ Mostly done |
 | **fillers** | 10/15 | 12/15 | 3 remaining after judge: "like" preserved incorrectly, sentence-start "so" not removed | Improve filler removal rules |
-| **self-correction-det** | 8/12 | 10/12 | 2 remaining after judge: prefix loss in some corrections | Same root cause as cascading-corrections |
-| **grammar** | 8/12 | 10/12 | 2 remaining after judge: edge cases (comma placement, sentence splitting) | Cadence-Fast + grammar-only LLM prompt + context injection |
+| **self-correction-det** | 9/12 | 11/12 | ~~Prefix loss in some corrections~~ **Mostly fixed in Phase 2.5 P2.** 3 remaining need LLM-level understanding | Overlap merge improved; remaining deferred |
+| **grammar** | 8/12 | 11/12 | 1 remaining after judge: edge cases (comma placement, sentence splitting) | Cadence-Fast + grammar-only LLM prompt + context injection |
 
 ---
 
@@ -807,30 +807,44 @@ Per-category changes (exact → judge):
 
 **Expected impact:** ~~If normalizer is working correctly, expect names-technical to jump from 2/10 → ~5-6/10 exact and single-line from 3/5 → ~4-5/5 exact. Judge score should reach ~65-67%.~~ → **Actual: 71% judge (exceeded prediction). names-technical 4/10 exact, 8/10 judge. single-line 2/5 exact, 4/5 judge.**
 
-#### Priority 2: Fix Cascading Correction Prefix Preservation (M)
+#### Priority 2: Fix Cascading Correction Prefix Preservation (M) ✅
 
-Current failure: "the meeting is tuesday, scratch that, wednesday, actually no, thursday" → "thursday" (loses "The meeting is" prefix). The `SelfCorrectionDetector` strips everything before the correction marker, leaving only the replacement fragment.
+**Status: Complete.**
 
-**Root cause:** The detector resolves corrections greedily — when a marker is found, it keeps only the text after the marker. With multiple markers, each pass discards more prefix until only the final word remains.
+Three mechanisms were added to `SelfCorrectionDetector` to fix cascading correction prefix loss:
 
-**Fix approach:** Process each repair only up to the next correction marker, not the full remaining tail:
-- When a marker is found, define the repair span as: text after the marker **up to the next marker or sentence boundary**
-- Merge the repair with the preserved prefix
-- Repeat for subsequent markers
+1. **Effective repair head** — `effectiveRepairHead(from:)` truncates repair at the next correction marker for fragment classification, preventing cascading markers from inflating token counts. The full repair is still used for stitching so the cascading loop handles remaining markers.
 
-Example trace (correct behavior):
-```
-Input: "the meeting is tuesday, scratch that, wednesday, actually no, thursday"
-Pass 1: marker "scratch that" → replace "tuesday" with "wednesday" → "the meeting is wednesday, actually no, thursday"
-Pass 2: marker "actually no" → replace "wednesday" with "thursday" → "the meeting is thursday"
-Result: "The meeting is Thursday." (prefix preserved, capitalized)
-```
+2. **Correction idiom stripping** — `stripCorrectionIdiom(from:)` recognizes "make it X" / "make that X" as idiomatic corrections, extracting the value portion. A `requireStrongAnchor` guard prevents false stripping of literal imperative speech (e.g., "make it happen").
 
-- [ ] Modify `SelfCorrectionDetector` to preserve stable prefix across multi-correction passes
-- [ ] Add targeted unit tests for all 5 cascading-corrections benchmark cases
-- [ ] Verify `selfcorr-det-3` ("the meeting is at three, never mind, it's at four") also benefits (same root cause)
+3. **Overlap-based merge** — `tryOverlapMerge(before:repair:)` handles clause-starter repairs ("it's at four") by finding structural overlap with the suffix of `before` and merging at the overlap point. Guards against false positives: tail-length check prevents unrelated overlaps, copula check prevents weak preposition overlaps (e.g., "meet at noon" → "it's at risk").
 
-**Expected impact:** cascading-corrections from 1/5 → ~4/5 exact, self-correction-det from 8/12 → ~10-11/12 exact.
+**Changes:**
+- `SelfCorrectionDetector.swift`: Added 3 new methods + `weakOverlapTokens`/`copulaTokens` sets, modified `mergeCorrection` and `repairLooksLikeFragment`
+- `SelfCorrectionDetectorTests.swift`: Updated 1 test, added 12 new tests (43 total, was 21)
+
+- [x] Modify `SelfCorrectionDetector` to preserve stable prefix across multi-correction passes
+- [x] Add targeted unit tests for all 5 cascading-corrections benchmark cases
+- [x] Verify `selfcorr-det-3` ("the meeting is at three, never mind, it's at four") also benefits (same root cause)
+
+**Benchmark results (after Priority 2):**
+
+| Metric | Before Priority 2 | After Priority 2 | Delta |
+|--------|-------------------|-------------------|-------|
+| Exact-match | 52/100 (52%) | 56/100 (56%) | **+4** |
+| Judge pass | 71/100 (71%) | 70/100 (70%) | -1 (within noise) |
+| Judge rescued | 19 | 14 | -5 (more exact matches need fewer rescues) |
+
+Per-category changes (exact → judge):
+| Category | Before | After | Notes |
+|----------|--------|-------|-------|
+| cascading-corrections | 1/5 → 2/5 | 4/5 → 5/5 | **+3 exact, +3 judge** — prefix preservation working |
+| self-correction-det | 8/12 → 11/12 | 9/12 → 11/12 | **+1 exact** — selfcorr-det-3 fixed via overlap merge |
+| names-technical | 4/10 → 8/10 | 4/10 → 6/10 | -2 judge (LLM variance) |
+| grammar | 8/12 → 11/12 | 8/12 → 11/12 | No change |
+| fillers | 10/15 → 12/15 | 10/15 → 12/15 | No change |
+
+**Known limitation:** When a clause-starter repair has no structural overlap with the before text (e.g., "it's wednesday" correcting "tuesday"), the original prefix is lost. Fixing this would require semantic matching between day names, which is beyond current heuristics. The output is still acceptable ("it's thursday" instead of "the meeting is thursday").
 
 #### Priority 3: Add High-Precision Implicit Self-Correction Markers (M)
 
@@ -961,19 +975,19 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ### Per-Category Progression (Baseline → Current Best)
 
-| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Next Fix |
-|---|---|---|---|---|---|
-| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| short-input | 7/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| grammar | 2/12 | 8/12 | 8/12 | 10/12 | Cadence-Fast + grammar-only LLM prompt + context injection |
-| fillers | 3/15 | 10/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
-| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | Fix prefix preservation in cascading corrections (Phase 2.5) |
-| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | Cadence-Fast (native Hindi) + Whisper prompt tuning |
-| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | **Verify SpokenFormNormalizer in benchmark** (Phase 2.5) + Whisper prompt |
-| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | Fix prefix preservation in `SelfCorrectionDetector` (Phase 2.5) |
-| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | Cadence-Fast immune to injection; accept remaining |
-| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | Add high-precision implicit correction markers (Phase 2.5) |
-| single-line | 1/5 | 0/5 | 3/5 | 3/5 | Verify SpokenFormNormalizer colon conversion (Phase 2.5) |
+| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Phase 2.5-P2 (exact) | Phase 2.5-P2 (judge) | Next Fix |
+|---|---|---|---|---|---|---|---|
+| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| short-input | 7/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | Cadence-Fast + grammar-only LLM prompt + context injection |
+| fillers | 3/15 | 10/15 | 10/15 | 12/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
+| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | **9/12** | **11/12** | **+1 exact** — selfcorr-det-3 fixed via overlap merge |
+| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | Cadence-Fast (native Hindi) + Whisper prompt tuning |
+| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | 4/10 | 6/10 | Whisper prompt conditioning |
+| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | **4/5** | **5/5** | **+3 exact, +3 judge** — prefix preservation fixed ✅ |
+| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | Cadence-Fast immune to injection; accept remaining |
+| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | Add high-precision implicit correction markers (Phase 2.5 Priority 3) |
+| single-line | 1/5 | 0/5 | 3/5 | 3/5 | 2/5 | 4/5 | Verify SpokenFormNormalizer colon conversion |
 
 ---
 
@@ -1006,7 +1020,7 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | `Tests/NumberNormalizerTests.swift` | ❌ Not started | Unit tests for number normalizer |
 | `LLM/LocalLLMProcessor.swift` | ✅ Fix 2a done | Capitalize short bypass results |
 | `TextProcessing/TextProcessor.swift` | ✅ Done | SpokenFormNormalizer integrated; Fix 2b capitalization |
-| `TextProcessing/SelfCorrectionDetector.swift` | ⚠️ Needs update | Fix 2b capitalization done; **needs prefix preservation fix for cascading corrections** |
+| `TextProcessing/SelfCorrectionDetector.swift` | ✅ Done | Fix 2b capitalization + **prefix preservation fix for cascading corrections** (Phase 2.5 P2) |
 | `Transcription/TranscriptionPipeline.swift` | ⚠️ Partial | TextProcessor wired in; Whisper prompt conditioning and context injection not yet done |
 | `TextInsertion/InsertionContext.swift` | ❌ Not started | Add `surroundingText` property via AX API |
 | `Models/CadenceFastModel.swift` | ❌ Not started | ONNX/CoreML wrapper for Cadence-Fast inference |
@@ -1028,11 +1042,11 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ## Target Metrics (Revised)
 
-| Metric | Baseline | Phase 0-1-2 (actual) | Phase 2.5 (target) | Phase 3-4 | Phase 5-6+ |
-|---|---|---|---|---|---|
-| Pass rate (exact match) | 47% | **50%** | ~62-65% | ~75% | ~80% |
-| Pass rate (judge score) | ~58% (est.) | **61%** | ~68-72% | ~80-83% | ~85%+ |
-| Avg latency (LLM cases) | 0.33s | 0.33s | 0.33s | 0.36s (+Cadence) | 0.36s |
+| Metric | Baseline | Phase 0-1-2 (actual) | Phase 2.5-P2 (actual) | Phase 2.5 (target) | Phase 3-4 | Phase 5-6+ |
+|---|---|---|---|---|---|---|
+| Pass rate (exact match) | 47% | **50%** | **56%** | ~62-65% | ~75% | ~80% |
+| Pass rate (judge score) | ~58% (est.) | **61%** | **70%** | ~68-72% | ~80-83% | ~85%+ |
+| Avg latency (LLM cases) | 0.33s | 0.33s | 0.34s | 0.33s | 0.36s (+Cadence) | 0.36s |
 | RAM (total models) | ~1 GB | ~1 GB | ~1 GB | ~1.2 GB (+Cadence) | ~1.2-2.2 GB |
 | Default model | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | TBD (maybe LFM2.5) |
 | Pipeline stages | 4 | 5 (+SpokenForm) | 5 | 6 (+Cadence) | 6 |

@@ -24,7 +24,7 @@ final class SelfCorrectionDetectorTests: XCTestCase {
     func testWaitCorrectionWithComma() {
         XCTAssertEqual(
             detector.detectAndResolve("The meeting is at 3, wait, it's at 4"),
-            "It's at 4"
+            "The meeting is at 4"
         )
     }
 
@@ -226,6 +226,102 @@ final class SelfCorrectionDetectorTests: XCTestCase {
         XCTAssertEqual(
             detector.detectAndResolve("  Turn left, actually no,   turn right  "),
             "Turn right"
+        )
+    }
+
+    // MARK: - Cascading Corrections (Prefix Preservation)
+
+    func testCascadeDoubleCorrection() {
+        XCTAssertEqual(
+            detector.detectAndResolve("the meeting is tuesday, scratch that, wednesday, actually no, thursday"),
+            "the meeting is thursday"
+        )
+    }
+
+    func testCascadeTripleWithDifferentMarkers() {
+        XCTAssertEqual(
+            detector.detectAndResolve("order pizza, no no, order pasta, forget that, order sushi"),
+            "order sushi"
+        )
+    }
+
+    func testCascadeMixedInlineAndFullCorrections() {
+        XCTAssertEqual(
+            detector.detectAndResolve("set the color to red, I mean blue, no no, green"),
+            "set the color to green"
+        )
+    }
+
+    func testCascadeFragmentPreservationThroughRestart() {
+        XCTAssertEqual(
+            detector.detectAndResolve("invite alice, scratch that, invite bob and carol"),
+            "invite bob and carol"
+        )
+    }
+
+    func testCascadeNeverMindWithMakeItIdiom() {
+        XCTAssertEqual(
+            detector.detectAndResolve("the deadline is friday, never mind, make it monday"),
+            "the deadline is monday"
+        )
+    }
+
+    func testCascadeNeverMindWithMakeThatIdiom() {
+        XCTAssertEqual(
+            detector.detectAndResolve("the color is blue, never mind, make that red"),
+            "the color is red"
+        )
+    }
+
+    // MARK: - Overlap-Based Merge (Clause Starter with Context Preservation)
+
+    func testOverlapMergePreservesContext() {
+        XCTAssertEqual(
+            detector.detectAndResolve("the meeting is at three, never mind, it's at four"),
+            "the meeting is at four"
+        )
+    }
+
+    func testOverlapMergeDoesNotFalsePositiveOnUnrelatedOverlap() {
+        XCTAssertEqual(
+            detector.detectAndResolve("They arrive on Monday, wait, it's on sale today"),
+            "It's on sale today"
+        )
+    }
+
+    func testOverlapMergeFullClauseStarterWithNoOverlap() {
+        XCTAssertEqual(
+            detector.detectAndResolve("The meeting is at 3, wait, it's cancelled"),
+            "It's cancelled"
+        )
+    }
+
+    // MARK: - Regression Tests (Oracle Review Counter-Examples)
+
+    func testLiteralMakeItIdiomNotStripped() {
+        // "make it happen" is literal imperative speech, not a correction idiom
+        XCTAssertEqual(
+            detector.detectAndResolve("We can postpone it, never mind, make it happen"),
+            "Make it happen"
+        )
+    }
+
+    func testOverlapMergeFalsePositiveOnWeakPreposition() {
+        // "at" without copula before it should not trigger overlap merge
+        XCTAssertEqual(
+            detector.detectAndResolve("We meet at noon, wait, it's at risk"),
+            "It's at risk"
+        )
+    }
+
+    func testClauseStarterCascadePreservesOriginalPrefix() {
+        // When a clause-starter repair ("it's wednesday") has no structural overlap
+        // with before, the original prefix is lost. The cascading still resolves
+        // the final value correctly. Full prefix preservation would require semantic
+        // matching between day names, which is beyond current heuristics.
+        XCTAssertEqual(
+            detector.detectAndResolve("the meeting is tuesday, sorry, it's wednesday, actually no, thursday"),
+            "it's thursday"
         )
     }
 }

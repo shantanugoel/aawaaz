@@ -78,10 +78,28 @@ struct SelfCorrectionDetector {
         "there", "here", "let's", "please",
     ]
 
+    /// Idiomatic correction lead-ins that speakers use when correcting a value.
+    /// "make it monday" means "replace with monday", not "make it monday" literally.
+    private static let correctionIdioms: [[String]] = [
+        ["make", "it"],
+        ["make", "that"],
+    ]
+
     private static let boundaryTokens: Set<String> = [
         "to", "for", "with", "at", "in", "on", "from", "into", "onto", "about",
         "of", "the", "a", "an", "this", "that", "these", "those",
         "my", "your", "his", "her", "our", "their", "its",
+        "is", "are", "was", "were", "am", "be", "been",
+    ]
+
+    /// Function words (prepositions, articles) that are weak overlap signals.
+    /// Single-token overlap on these requires structural support (copula before).
+    private static let weakOverlapTokens: Set<String> = [
+        "a", "an", "the", "at", "on", "in", "to", "for", "from", "with", "of", "by",
+    ]
+
+    /// Copula verbs used to validate weak-token overlaps.
+    private static let copulaTokens: Set<String> = [
         "is", "are", "was", "were", "am", "be", "been",
     ]
 
@@ -319,10 +337,21 @@ struct SelfCorrectionDetector {
 
         guard !normalizedRepair.isEmpty else { return originalSentence }
 
-        if repairLooksLikeFragment(normalizedRepair, before: stablePrefix),
-           let preservedPrefix = preservedPrefix(for: stablePrefix, repair: normalizedRepair) {
-            let stitched = stitch(prefix: preservedPrefix, repair: normalizedRepair)
+        // Try idiom stripping: "make it monday" → "monday"
+        // When an idiom was stripped, require a strong prefix anchor to avoid
+        // corrupting literal imperative speech (e.g., "make it happen").
+        let strippedRepair = stripCorrectionIdiom(from: normalizedRepair)
+        let idiomWasStripped = strippedRepair != normalizedRepair
+
+        if repairLooksLikeFragment(strippedRepair, before: stablePrefix, fullRepair: normalizedRepair),
+           let preservedPrefix = preservedPrefix(for: stablePrefix, repair: strippedRepair, requireStrongAnchor: idiomWasStripped) {
+            let stitched = stitch(prefix: preservedPrefix, repair: strippedRepair)
             return normalizedSentenceStart(stitched, basedOn: originalSentence)
+        }
+
+        // Try overlap-based merge for clause-starter repairs (e.g., "it's at four")
+        if let overlapMerge = tryOverlapMerge(before: stablePrefix, repair: normalizedRepair) {
+            return normalizedSentenceStart(overlapMerge, basedOn: originalSentence)
         }
 
         return normalizedSentenceStart(normalizedRepair, basedOn: originalSentence)
@@ -370,7 +399,105 @@ struct SelfCorrectionDetector {
         return String(trimmed[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func repairLooksLikeFragment(_ repair: String, before: String) -> Bool {
+    /// Strip correction idiom lead-ins like "make it" / "make that".
+    /// Returns the value portion if an idiom is found, otherwise the original text.
+    private func stripCorrectionIdiom(from text: String) -> String {
+        let tokens = words(in: text)
+        for idiom in Self.correctionIdioms {
+            guard tokens.count > idiom.count else { continue }
+            let matches = zip(tokens.prefix(idiom.count), idiom).allSatisfy {
+                $0.0.lowercased == $0.1
+            }
+            if matches {
+                let afterIdiom = tokens[idiom.count].range.lowerBound
+                let remainder = String(text[afterIdiom...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !remainder.isEmpty {
+                    return remainder
+                }
+            }
+        }
+        return text
+    }
+
+    /// Returns the effective repair "head" for fragment analysis — the portion
+    /// of the repair text before any subsequent correction marker. This prevents
+    /// cascading markers (e.g., "wednesday, actually no, thursday") from inflating
+    /// the token count used for fragment classification.
+    private func effectiveRepairHead(from repair: String) -> String {
+        guard let match = nextMarker(in: repair) else { return repair }
+        let head = String(repair[..<match.range.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "[,;:]+$", with: "", options: .regularExpression)
+        return head.isEmpty ? repair : head
+    }
+
+    /// Try overlap-based merge for repairs starting with a full clause starter.
+    /// When the repair shares tokens with the suffix of `before`, merges at the
+    /// overlap point to preserve context.
+    ///
+    /// Example: before = "the meeting is at three", repair = "it's at four"
+    /// → skip "it's", find "at" overlap → "the meeting is at four"
+    private func tryOverlapMerge(before: String, repair: String) -> String? {
+        let repairTokens = words(in: repair)
+        guard let first = repairTokens.first,
+              Self.fullClauseStarters.contains(first.lowercased) else {
+            return nil
+        }
+
+        let beforeTokens = words(in: before)
+        guard !beforeTokens.isEmpty else { return nil }
+
+        // Skip clause-starter tokens at the beginning of repair
+        var repairBodyStart = 1
+        while repairBodyStart < repairTokens.count,
+              Self.fullClauseStarters.contains(repairTokens[repairBodyStart].lowercased) {
+            repairBodyStart += 1
+        }
+        guard repairBodyStart < repairTokens.count else { return nil }
+
+        let repairBodyFirstToken = repairTokens[repairBodyStart].lowercased
+
+        // Look for the overlap token in the SUFFIX of before (last 3 tokens)
+        let suffixStart = max(0, beforeTokens.count - 3)
+        let beforeSuffix = beforeTokens[suffixStart...]
+
+        for (idx, beforeToken) in beforeSuffix.enumerated() where beforeToken.lowercased == repairBodyFirstToken {
+            let beforeTokenIndex = suffixStart + idx
+            let beforeTailCount = beforeTokens.count - beforeTokenIndex - 1
+            let repairTailCount = repairTokens.count - repairBodyStart - 1
+
+            // Guard against false-positive overlaps: the repair tail should not
+            // be longer than the before tail. E.g., "on Monday" → "on sale today"
+            // has repair tail (2) > before tail (1) → spurious overlap.
+            guard repairTailCount <= beforeTailCount else { continue }
+
+            // For weak overlap tokens (prepositions, articles), require a copula
+            // immediately before the overlap in `before` to ensure structural
+            // similarity. E.g., "is at" is valid; "meet at" is not.
+            if Self.weakOverlapTokens.contains(repairBodyFirstToken) {
+                guard beforeTokenIndex > 0,
+                      Self.copulaTokens.contains(beforeTokens[beforeTokenIndex - 1].lowercased) else {
+                    continue
+                }
+            }
+
+            // Found overlap — build merged result
+            let prefix = String(before[..<beforeToken.range.upperBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let tailStartIndex = repairBodyStart + 1
+            guard tailStartIndex < repairTokens.count else { continue }
+            let tailText = String(repair[repairTokens[tailStartIndex].range.lowerBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tailText.isEmpty {
+                return stitch(prefix: prefix, repair: tailText)
+            }
+        }
+
+        return nil
+    }
+
+    private func repairLooksLikeFragment(_ repair: String, before: String, fullRepair: String? = nil) -> Bool {
         let repairTokens = words(in: repair)
         let beforeTokens = words(in: before)
 
@@ -378,6 +505,12 @@ struct SelfCorrectionDetector {
             return false
         }
 
+        // Full clause starters are never fragments (handled by overlap merge)
+        if Self.fullClauseStarters.contains(first) {
+            return false
+        }
+
+        // Single-word repair is always a fragment
         if repairTokens.count == 1 {
             return true
         }
@@ -386,14 +519,24 @@ struct SelfCorrectionDetector {
             return true
         }
 
-        if Self.fullClauseStarters.contains(first) {
-            return false
+        // Use effective repair head for classification when subsequent markers exist.
+        // E.g., "wednesday, actually no, thursday" → effective head is "wednesday" (1 token).
+        let analysisRepair = fullRepair.map { effectiveRepairHead(from: $0) } ?? repair
+        let analysisTokens = (analysisRepair == repair) ? repairTokens : words(in: analysisRepair)
+
+        if analysisTokens.count == 1 {
+            return true
         }
 
-        return beforeTokens.count >= 5 && repairTokens.count <= 3
+        if let analysisFirst = analysisTokens.first?.lowercased,
+           Self.fragmentLeadTokens.contains(analysisFirst) {
+            return true
+        }
+
+        return beforeTokens.count >= 5 && analysisTokens.count <= 3
     }
 
-    private func preservedPrefix(for before: String, repair: String) -> String? {
+    private func preservedPrefix(for before: String, repair: String, requireStrongAnchor: Bool = false) -> String? {
         let beforeTokens = words(in: before)
         let repairTokens = words(in: repair)
 
@@ -412,6 +555,9 @@ struct SelfCorrectionDetector {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
+        // Weakest fallback: drop last token. Skip when a strong anchor is required
+        // (e.g., after idiom stripping) to avoid corrupting literal speech.
+        guard !requireStrongAnchor else { return nil }
         guard beforeTokens.count > 1 else { return nil }
 
         return String(before[..<beforeTokens.last!.range.lowerBound])
