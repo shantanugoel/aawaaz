@@ -1,8 +1,8 @@
 # LLM Cleanup Quality Plan: 47% → 85%+
 
-## Current State (after Phase 0-1-2-2.5-3-4S2 implementation + bug fixes)
+## Current State (after Phase 0-1-2-2.5-3-4S2-6 implementation + bug fixes)
 
-The example-driven prompt redesign moved pass rate from **17% → 47%** on the 100-case benchmark. Phase 0-1-2 implementation (LLM-as-Judge, pipeline fixes, SpokenFormNormalizer) moved the measured scores to **50% exact-match, 61% judge pass rate**. Phase 2.5 (stabilization + deterministic fixes) moved scores to **64% exact-match, 79% judge pass rate**. Phase 3 (Whisper prompt conditioning + surrounding text context injection) maintains scores at **65% exact-match, 78% judge pass rate**. Phase 4 Step 2 (punctuation model Swift integration) moved scores to **61% exact-match, 84% judge pass rate** — exact match dropped slightly (expected outputs were tuned pre-punct-model) but real quality improved significantly. Bug fixes (input gating, normalization, memory leak, settings UI) maintain scores at **61% exact-match, 84% judge pass rate**. Current best config: **Qwen 3 0.6B + xlm-roberta punct model, 0.31s LLM + 0.07s punct avg latency, ~2 GB RAM**.
+The example-driven prompt redesign moved pass rate from **17% → 47%** on the 100-case benchmark. Phase 0-1-2 implementation (LLM-as-Judge, pipeline fixes, SpokenFormNormalizer) moved the measured scores to **50% exact-match, 61% judge pass rate**. Phase 2.5 (stabilization + deterministic fixes) moved scores to **64% exact-match, 79% judge pass rate**. Phase 3 (Whisper prompt conditioning + surrounding text context injection) maintains scores at **65% exact-match, 78% judge pass rate**. Phase 4 Step 2 (punctuation model Swift integration) moved scores to **61% exact-match, 84% judge pass rate** — exact match dropped slightly (expected outputs were tuned pre-punct-model) but real quality improved significantly. Bug fixes (input gating, normalization, memory leak, settings UI) maintain scores at **61% exact-match, 84% judge pass rate**. Phase 6 (prompt tuning — 3 conditional examples, Hindi particle rule, self-correction instruction, content-drop guard fix) moved scores to **62% exact-match, 85% judge pass rate**. Current best config: **Qwen 3 0.6B + xlm-roberta punct model, 0.37s LLM + 0.07s punct avg latency, ~2 GB RAM**.
 
 > **Benchmark note:** Phase 3 scores (65% exact, 78% judge) are from a clean run with all layers active. The context injection instruction is conditional — only included when surrounding text is present, so benchmark tests (which have no surrounding text) run with the same prompt as Phase 2.5-P4. Score fluctuations vs Phase 2.5-P4 (64/79) are within normal LLM variance for a 0.6B model.
 
@@ -1227,15 +1227,21 @@ Per-category changes (exact → judge):
 23. Decision: adopt LFM2.5 as an option, or keep Qwen 3 0.6B as default
 24. Run benchmark → expect **~83-85%**
 
-### Phase 6: Prompt Tuning (1 day)
+### Phase 6: Prompt Tuning (1 day) ✅ DONE
 
-25. Add more prompt examples targeting remaining grammar failures:
-    - Hinglish example with romanized Hindi preservation
-    - Self-correction example
-    - Grammar-focused examples (contractions, comma usage)
-26. Tune example count (4 → 6-8) and measure quality vs. latency trade-off
-27. Add prompt instruction/examples for converting standalone spoken symbol words to symbols when used between words (e.g., "preposition slash article" → "preposition/article"). Standalone "slash" is too ambiguous for deterministic normalization (false positives: "slash prices", "slash and burn") but the LLM can use context to distinguish. Add 1-2 examples to the prompt showing this conversion.
-28. Run benchmark → expect **~85%+**
+25. ✅ Added 3 conditional prompt examples (for `.medium`/`.full` cleanup levels):
+    - Self-correction example: "well actually" → keep corrected version
+    - Sentence-splitting example: independent clauses get period, not comma
+    - Hinglish continuity example: don't split at Hindi-English boundary
+26. ✅ Tuned example count from 4 → 7 (4 base + 3 conditional for medium/full). Latency increased from 0.31s → 0.37s avg (+0.06s, acceptable).
+27. ⏭️ Skipped spoken-slash prompt example — SpokenFormNormalizer handles this pre-LLM, so the model never sees raw "slash" tokens. Added Hinglish continuity and sentence-splitting examples instead (higher impact).
+28. ✅ Benchmark: **62% exact / 85% judge** (up from 61%/84%). Hit the ~85%+ target.
+
+**Additional changes:**
+- Added global Hindi particle rule: "ki", "toh", "hai" are not sentence boundaries
+- Added self-correction instruction for medium/full cleanup levels
+- Made content-drop guard self-correction-aware (relaxed threshold when input contains correction markers like "well actually")
+- Added 5 unit tests for prompt composition and content-drop guard behavior
 
 ### Phase 7: Personalization Foundation (ongoing)
 
@@ -1271,6 +1277,8 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | **Phase 2.5-P4** | **Qwen 3 0.6B** | **+ post-LLM capitalization + post-colon cap** | **64/100 (64%)** | **79/100 (79%)** | **0.31s** | **+47 exact, +18 judge** |
 | **Phase 3** | **Qwen 3 0.6B** | **+ Whisper prompt conditioning + context injection** | **65/100 (65%)** | **78/100 (78%)** | **0.31s** | **+48 exact, +17 judge** |
 | **Phase 4 Step 1** | **Qwen 3 0.6B** | **(no code change — same as Phase 3; punct model eval only)** | **65/100 (65%)** | **82/100 (82%)** | **0.31s** | **+48 exact, +21 judge** |
+| **Phase 4 Step 2** | **Qwen 3 0.6B** | **+ xlm-roberta punct model** | **61/100 (61%)** | **84/100 (84%)** | **0.31s** | **+44 exact, +23 judge** |
+| **Phase 6** | **Qwen 3 0.6B** | **+ prompt tuning (7 examples, Hindi rule, self-corr instruction)** | **62/100 (62%)** | **85/100 (85%)** | **0.37s** | **+45 exact, +24 judge** |
 
 ### Multi-Model Comparison (old prompt, Step 0 style)
 
@@ -1287,19 +1295,19 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ### Per-Category Progression (Baseline → Current Best)
 
-| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Phase 2.5-P2 (exact) | Phase 2.5-P2 (judge) | Phase 2.5-P3 (exact) | Phase 2.5-P3 (judge) | Phase 2.5-P4 (exact) | Phase 2.5-P4 (judge) | Phase 3 (exact) | Phase 3 (judge) | Ph4-S1 (exact) | Ph4-S1 (judge) | Next Fix |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| short-input | 7/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
-| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | 8/12 | 11/12 | 8/12 | 9/12 | 8/12 | 9/12 | 8/12 | 11/12 | Punct model + grammar-only LLM prompt + context injection |
-| fillers | 3/15 | 10/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 11/15 | 10/15 | 12/15 | 10/15 | 12/15 | Filler rules improvement ("like", sentence-start "so") |
-| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | **9/12** | **11/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | ✅ Done |
-| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 5/10 | 2/10 | 4/10 | 2/10 | 5/10 | Punct model (Hindi Danda F1 96-97%) + Whisper prompt tuning |
-| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | 4/10 | 6/10 | 4/10 | 6/10 | **5/10** | **7/10** | 5/10 | 6/10 | 5/10 | 6/10 | Whisper prompt conditioning (in place, benefit shows with real ASR) |
-| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | ✅ Done |
-| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 1/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | Accept remaining for LLM; punct model (token classifier) immune |
-| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | **5/10** | **7/10** | 5/10 | 7/10 | 6/10 | 7/10 | 6/10 | 7/10 | 3 remaining need larger model or "well actually" |
-| single-line | 1/5 | 0/5 | 3/5 | 3/5 | 2/5 | 4/5 | 2/5 | 4/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | ✅ Done |
+| Category | Step 0 | Step 4-5 (exact) | Phase 0-1-2 (exact) | Phase 0-1-2 (judge) | Phase 2.5-P2 (exact) | Phase 2.5-P2 (judge) | Phase 2.5-P3 (exact) | Phase 2.5-P3 (judge) | Phase 2.5-P4 (exact) | Phase 2.5-P4 (judge) | Phase 3 (exact) | Phase 3 (judge) | Ph4-S1 (exact) | Ph4-S1 (judge) | Ph4-S2 (exact) | Ph4-S2 (judge) | Ph6 (exact) | Ph6 (judge) | Next Fix |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| code-terminal | 4/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | ✅ Done |
+| short-input | 7/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8 | 0/8 | 8/8 | 0/8 | 8/8 | ✅ Done |
+| grammar | 2/12 | 8/12 | 8/12 | 10/12 | 8/12 | 11/12 | 8/12 | 11/12 | 8/12 | 9/12 | 8/12 | 9/12 | 8/12 | 11/12 | 8/12 | 10/12 | 8/12 | 9/12 | LLM variance; comma splice persists for grammar-6 |
+| fillers | 3/15 | 10/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 12/15 | 10/15 | 11/15 | 10/15 | 12/15 | 10/15 | 12/15 | 11/15 | 15/15 | 11/15 | 15/15 | ✅ Done |
+| self-correction-det | 0/12 | 8/12 | 8/12 | 10/12 | **9/12** | **11/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | 9/12 | **12/12** | 10/12 | 12/12 | 10/12 | 12/12 | ✅ Done |
+| hinglish | 0/10 | 2/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 3/10 | 2/10 | 5/10 | 2/10 | 4/10 | 2/10 | 5/10 | 5/10 | 7/10 | **6/10** | **8/10** | Punct model boundary errors at Hindi particles |
+| names-technical | 0/10 | 2/10 | 2/10 | 3/10 | 4/10 | 6/10 | 4/10 | 6/10 | **5/10** | **7/10** | 5/10 | 6/10 | 5/10 | 6/10 | 2/10 | 4/10 | 2/10 | **5/10** | Deterministic technical normalization / lexicon |
+| cascading-corrections | 0/5 | 1/5 | 1/5 | 2/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | 4/5 | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 | ✅ Done |
+| adversarial | 0/5 | 0/5 | 0/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 1/5 | 2/5 | 1/5 | 2/5 | 1/5 | 3/5 | 0/5 | 1/5 | 0/5 | 1/5 | Accept remaining; punct model immune |
+| self-correction-llm | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | 0/10 | **5/10** | **7/10** | 5/10 | 7/10 | 6/10 | 7/10 | 6/10 | 7/10 | 9/10 | 9/10 | 9/10 | 9/10 | 1 remaining: punct model masks "well actually" |
+| single-line | 1/5 | 0/5 | 3/5 | 3/5 | 2/5 | 4/5 | 2/5 | 4/5 | **4/5** | **5/5** | 4/5 | 5/5 | 4/5 | 5/5 | 3/5 | 5/5 | 3/5 | 5/5 | ✅ Done |
 
 ---
 
@@ -1322,6 +1330,9 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 15. **Post-LLM deterministic guards catch reliable model weaknesses.** Small models consistently miss sentence-start capitalization. A deterministic guard after LLM output is safe, effective, and costs nothing — fixing 3 cases in this instance. Guard against known non-prose patterns (URLs, emails, paths, flags) to avoid false positives.
 16. **Conditional prompt instructions are critical for small models.** Adding an always-present `<context_before>` instruction to the system prompt caused a 4-point regression (64→60% exact, 79→75% judge) on the 0.6B model — even though the instruction was unused in benchmarks. Making it conditional (only included when surrounding text exists) recovered to 65%/78%. Small models have limited attention budgets; every unused instruction is wasted capacity.
 17. **Benchmark scores plateau when features target production-only scenarios.** Phase 3's context injection benefits real users (surrounding text helps continuity/capitalization) but can't be measured by the benchmark (which feeds raw text without cursor context). This is expected — the benchmark measures the pipeline's baseline, not its ceiling.
+18. **Upstream pipeline stages can mask LLM prompt patterns.** The punct model transforms "well actually" into ", well, actually" with commas, which prevents the LLM from recognizing it as a self-correction trigger even when the prompt includes an explicit example. Pipeline ordering matters — deterministic correction should run before punctuation model to preserve correction markers.
+19. **Conditional examples per cleanup level prevent contradiction.** A self-correction example (which teaches content deletion) contradicts `.light` mode's instruction to "Keep all words the same." Making examples conditional by cleanup level avoids this. The approach: base examples for all levels, specialized examples only for `.medium`/`.full`.
+20. **Prompt tuning has diminishing returns at 85%+.** The remaining failures are mostly upstream (punct model boundary errors, technical normalization) or inherently hard (adversarial). Further prompt examples won't help cases where the LLM sees already-corrupted input from earlier pipeline stages.
 
 ---
 
@@ -1333,7 +1344,7 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | `TextProcessing/NumberNormalizer.swift` | ❌ Not started | Number/date/time inverse text normalization |
 | `Tests/SpokenFormNormalizerTests.swift` | ✅ Done | 36 unit tests covering all pattern types + post-colon capitalization |
 | `Tests/NumberNormalizerTests.swift` | ❌ Not started | Unit tests for number normalizer |
-| `LLM/LocalLLMProcessor.swift` | ✅ Done | Capitalize short bypass results (Fix 2a) + post-LLM first-letter capitalization guard (Phase 2.5 P4) + **conditional `<context_before>` block support** (Phase 3) |
+| `LLM/LocalLLMProcessor.swift` | ✅ Done | Capitalize short bypass results (Fix 2a) + post-LLM first-letter capitalization guard (Phase 2.5 P4) + **conditional `<context_before>` block support** (Phase 3) + **Phase 6: Hindi particle rule, self-correction instruction/examples (medium/full), content-drop guard with correction-marker awareness** |
 | `TextProcessing/TextProcessor.swift` | ✅ Done | SpokenFormNormalizer integrated; Fix 2b capitalization |
 | `TextProcessing/SelfCorrectionDetector.swift` | ✅ Done | Fix 2b capitalization + prefix preservation (Phase 2.5 P2) + **implicit correction markers with biasFragmentMerge, validation guards, sentence-start guard** (Phase 2.5 P3) |
 | `Transcription/TranscriptionPipeline.swift` | ✅ Done | TextProcessor wired in; Whisper prompt conditioning via `sessionAppCategory` (captured at session start); context injection via `captureSurrounding: true` at finalize time |
@@ -1341,7 +1352,7 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 | `Models/PunctuationModelRunner.swift` | ❌ Not started | ONNX/CoreML wrapper for punctuation model inference (SentencePiece tokenizer, 128-token sliding window, label reconstruction) |
 | `LLM/LLMModelCatalog.swift` | ❌ Not started | Add LFM2.5-1.2B-Instruct entry |
 | `Tests/CleanupQualityTests.swift` | ✅ Done | Fix 2c fully applied; per-stage trace working |
-| `Tests/LocalLLMProcessorTests.swift` | ✅ Done | **New file** — 15 unit tests: 12 for post-LLM capitalization guard (Phase 2.5 P4) + 3 for context injection / category prompts (Phase 3) |
+| `Tests/LocalLLMProcessorTests.swift` | ✅ Done | **New file** — 20 unit tests: 12 for post-LLM capitalization guard (Phase 2.5 P4) + 3 for context injection / category prompts (Phase 3) + **5 for Phase 6 prompt composition + content-drop guard** |
 | `Persistence/CorrectionStore.swift` | ❌ Not started | SQLite storage for user correction pairs |
 | `TextProcessing/UserStylePreferences.swift` | ❌ Not started | User-specific formatting overrides |
 | `scripts/llm_judge.py` | ✅ Done | LLM-as-Judge evaluation script — supports both compact and verbose benchmark output formats |
@@ -1358,23 +1369,23 @@ If on macOS 26: evaluate Apple Foundation Models as Qwen replacement.
 
 ## Target Metrics (Revised)
 
-| Metric | Baseline | Phase 0-1-2 (actual) | Phase 2.5-P2 (actual) | Phase 2.5-P3 (actual) | Phase 2.5-P4 (actual) | Phase 3 (actual) | Phase 4 (target) | Phase 5-6+ |
+| Metric | Baseline | Phase 0-1-2 (actual) | Phase 2.5-P2 (actual) | Phase 2.5-P3 (actual) | Phase 2.5-P4 (actual) | Phase 3 (actual) | Phase 4 (actual) | Phase 6 (actual) |
 |---|---|---|---|---|---|---|---|---|
-| Pass rate (exact match) | 47% | **50%** | **56%** | **61%** | **64%** | **65%** | ~75% | ~80% |
-| Pass rate (judge score) | ~58% (est.) | **61%** | **70%** | **79%** | **79%** | **78%** | ~80-83% | ~85%+ |
-| Avg latency (LLM cases) | 0.33s | 0.33s | 0.34s | 0.32s | 0.31s | 0.31s | 0.32-0.34s (+punct model) | 0.34s |
-| RAM (total models) | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1.16-1.28 GB (+punct model) | ~1.2-2.2 GB |
-| Default model | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | TBD (maybe LFM2.5) |
+| Pass rate (exact match) | 47% | **50%** | **56%** | **61%** | **64%** | **65%** | **61%** | **62%** |
+| Pass rate (judge score) | ~58% (est.) | **61%** | **70%** | **79%** | **79%** | **78%** | **84%** | **85%** |
+| Avg latency (LLM cases) | 0.33s | 0.33s | 0.34s | 0.32s | 0.31s | 0.31s | 0.31s | 0.37s |
+| RAM (total models) | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~1 GB | ~2 GB | ~2 GB |
+| Default model | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B | Qwen 3 0.6B |
 | Pipeline stages | 4 | 5 (+SpokenForm) | 5 | 5 | 5 | 5 | 6 (+punct model) | 6 |
 
 ---
 
 ## Architecture: Current vs Target Pipeline
 
-### Current (65% exact / 78% judge)
+### Current (62% exact / 85% judge)
 
 ```
-Whisper (prompt-conditioned, category-aware) → SelfCorrection → FillerRemoval → SpokenFormNorm → LLM (punct+caps+grammar+style, context-injected) → Insert
+Whisper (prompt-conditioned, category-aware) → SelfCorrection → FillerRemoval → SpokenFormNorm → PunctModel (xlm-roberta, punct+truecasing) → LLM (grammar+style, 7 examples, context-injected) → Insert
 ```
 
 ### Target (85%+)

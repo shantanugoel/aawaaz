@@ -1,5 +1,20 @@
 import Foundation
 
+/// Result of a single sub-stage in the deterministic text processing pipeline.
+struct TextProcessingStageResult: Sendable {
+    let name: String
+    let enabled: Bool
+    let input: String
+    let output: String
+    var changed: Bool { input != output }
+}
+
+/// Detailed result from `processWithDetails`, exposing per-stage transformations.
+struct TextProcessingResult: Sendable {
+    let output: String
+    let stages: [TextProcessingStageResult]
+}
+
 /// Orchestrator for the pre-LLM text processing pipeline.
 ///
 /// Runs deterministic text cleanup steps in sequence:
@@ -25,11 +40,18 @@ struct TextProcessor {
     ///              words like "dash" and "slash" pass through to the LLM.
     /// - Returns: Cleaned text ready for LLM processing or direct insertion.
     func process(_ rawText: String, config: TextProcessingConfig, context: InsertionContext? = nil) -> String {
+        processWithDetails(rawText, config: config, context: context).output
+    }
+
+    /// Run all enabled text processing steps, returning per-stage details for logging.
+    func processWithDetails(_ rawText: String, config: TextProcessingConfig, context: InsertionContext? = nil) -> TextProcessingResult {
         var text = rawText
+        var stages: [TextProcessingStageResult] = []
 
         // Step 1: Self-correction detection (runs first so correction markers
         // like "actually no" and "I mean" aren't prematurely removed by filler
         // word removal).
+        let selfCorrectionInput = text
         if config.selfCorrectionEnabled {
             let beforeCorrection = text
             text = selfCorrectionDetector.detectAndResolve(text)
@@ -49,19 +71,33 @@ struct TextProcessor {
                 }
             }
         }
+        stages.append(TextProcessingStageResult(
+            name: "self-correction", enabled: config.selfCorrectionEnabled,
+            input: selfCorrectionInput, output: text
+        ))
 
         // Step 2: Filler word removal
+        let fillerInput = text
         if config.fillerRemovalEnabled {
             text = fillerWordRemover.removeFillers(from: text, fillerWords: config.fillerWords)
         }
+        stages.append(TextProcessingStageResult(
+            name: "filler removal", enabled: config.fillerRemovalEnabled,
+            input: fillerInput, output: text
+        ))
 
         // Step 3: Spoken-form normalization (converts spoken symbols to written forms)
         // In code/terminal contexts, only apply unambiguous patterns (e.g.,
         // "question mark" → "?") and skip context-dependent ones (URLs, paths,
         // commands) so that "dot", "slash", "dash" pass through to the LLM.
+        let normInput = text
         let isCodeTerminal = context.map { $0.appCategory == .code || $0.appCategory == .terminal } ?? false
         text = SpokenFormNormalizer.normalize(text, unambiguousOnly: isCodeTerminal)
+        stages.append(TextProcessingStageResult(
+            name: "spoken forms", enabled: true,
+            input: normInput, output: text
+        ))
 
-        return text
+        return TextProcessingResult(output: text, stages: stages)
     }
 }

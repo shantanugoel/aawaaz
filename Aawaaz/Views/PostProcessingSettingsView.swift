@@ -101,8 +101,7 @@ struct PostProcessingSettingsView: View {
                     TranscriptionPreviewView(
                         rawText: appState.lastRawTranscription,
                         processedText: appState.lastProcessedTranscription,
-                        isProcessing: appState.status == .processing,
-                        postProcessingOff: appState.postProcessingMode == .off
+                        isProcessing: appState.status == .processing
                     )
                 }
             }
@@ -241,7 +240,6 @@ private struct TranscriptionPreviewView: View {
     let rawText: String
     let processedText: String
     let isProcessing: Bool
-    let postProcessingOff: Bool
 
     @State private var showingRaw = false
 
@@ -251,30 +249,28 @@ private struct TranscriptionPreviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if hasChanges {
-                Picker("View", selection: $showingRaw) {
-                    Text("Processed").tag(false)
-                    Text("Raw").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+            Picker("View", selection: $showingRaw) {
+                Text("Processed").tag(false)
+                Text("Raw").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
-                Text(showingRaw ? rawText : processedText)
-                    .font(.body)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .textSelection(.enabled)
-            } else {
-                Text(rawText)
-                    .font(.body)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .textSelection(.enabled)
+            let displayText: String = {
+                if showingRaw { return rawText }
+                if !processedText.isEmpty { return processedText }
+                return rawText
+            }()
 
+            Text(displayText)
+                .font(.body)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .textSelection(.enabled)
+
+            if !showingRaw {
                 if processedText.isEmpty && !rawText.isEmpty {
                     if isProcessing {
                         HStack(spacing: 6) {
@@ -284,11 +280,11 @@ private struct TranscriptionPreviewView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } else if postProcessingOff {
-                        Text("LLM post-processing is off — no LLM cleanup was applied.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
+                } else if !hasChanges {
+                    Text("Post-processing made no changes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

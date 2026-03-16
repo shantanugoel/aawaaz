@@ -126,4 +126,62 @@ final class LocalLLMProcessorTests: XCTestCase {
         let prompt = LocalLLMProcessor.buildSystemPrompt(for: ctx, cleanupLevel: .full)
         XCTAssertTrue(prompt.contains("commands"), "Terminal context should mention commands in prompt")
     }
+
+    // MARK: - Phase 6: Prompt composition by cleanup level
+
+    func testSystemPromptHindiParticleRuleIncludedAlways() {
+        let ctx = InsertionContext(appName: "Notes", bundleIdentifier: "com.apple.Notes", fieldType: .multiLine)
+        for level in [CleanupLevel.light, .medium, .full] {
+            let prompt = LocalLLMProcessor.buildSystemPrompt(for: ctx, cleanupLevel: level)
+            XCTAssertTrue(prompt.contains("ki"), "Hindi particle rule should be present for \(level)")
+        }
+    }
+
+    func testSystemPromptSelfCorrectionOnlyForMediumFull() {
+        let ctx = InsertionContext(appName: "Notes", bundleIdentifier: "com.apple.Notes", fieldType: .multiLine)
+
+        let lightPrompt = LocalLLMProcessor.buildSystemPrompt(for: ctx, cleanupLevel: .light)
+        XCTAssertFalse(lightPrompt.contains("well actually"), "Light cleanup should NOT include self-correction instruction")
+        XCTAssertFalse(lightPrompt.contains("sixty dollars"), "Light cleanup should NOT include self-correction example")
+
+        let mediumPrompt = LocalLLMProcessor.buildSystemPrompt(for: ctx, cleanupLevel: .medium)
+        XCTAssertTrue(mediumPrompt.contains("well actually"), "Medium cleanup should include self-correction instruction")
+        XCTAssertTrue(mediumPrompt.contains("sixty dollars"), "Medium cleanup should include self-correction example")
+
+        let fullPrompt = LocalLLMProcessor.buildSystemPrompt(for: ctx, cleanupLevel: .full)
+        XCTAssertTrue(fullPrompt.contains("well actually"), "Full cleanup should include self-correction instruction")
+        XCTAssertTrue(fullPrompt.contains("sixty dollars"), "Full cleanup should include self-correction example")
+    }
+
+    func testSystemPromptConditionalExamplesPresent() {
+        let ctx = InsertionContext(appName: "Notes", bundleIdentifier: "com.apple.Notes", fieldType: .multiLine)
+        let prompt = LocalLLMProcessor.buildSystemPrompt(for: ctx, cleanupLevel: .medium)
+
+        // Verify all 3 conditional examples are present
+        XCTAssertTrue(prompt.contains("sixty dollars"), "Should include self-correction example")
+        XCTAssertTrue(prompt.contains("Everyone seemed to like it"), "Should include sentence-splitting example")
+        XCTAssertTrue(prompt.contains("jaldi start karo"), "Should include Hinglish continuity example")
+    }
+
+    // MARK: - Content drop guard with self-correction markers
+
+    func testOutputDropGuardRelaxedForSelfCorrection() {
+        // Input with "well actually" should use relaxed threshold
+        let input = "The budget is ten thousand well actually fifteen thousand."
+        let output = "The budget is fifteen thousand."
+        XCTAssertFalse(
+            LocalLLMProcessor.outputDroppedTooMuch(input: input, output: output),
+            "Self-correction output should NOT be rejected when input contains correction marker"
+        )
+    }
+
+    func testOutputDropGuardStrictWithoutMarker() {
+        // Same drop ratio but without correction marker should be rejected
+        let input = "The budget is ten thousand and also fifteen thousand."
+        let output = "The budget is fifteen thousand."
+        XCTAssertTrue(
+            LocalLLMProcessor.outputDroppedTooMuch(input: input, output: output),
+            "Heavy content drop without correction marker should be rejected"
+        )
+    }
 }

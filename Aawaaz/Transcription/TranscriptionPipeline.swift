@@ -448,11 +448,16 @@ final class TranscriptionPipeline {
         print("[Pipeline]   Context: app=\(context.appCategory) mode=\(mode) punct=\(punctEnabled) ANE=\(punctUseANE) llm=\(llmAvailable) codeCtx=\(isCodeTerminal)")
 
         // Step 1: Deterministic text processing (self-correction → fillers → spoken forms)
-        let preLLMText = textProcessor.process(text, config: config, context: context)
-        if preLLMText != text {
-            print("[Pipeline]   Stage 1 (deterministic): \"\(text)\" → \"\(preLLMText)\"")
-        } else {
-            print("[Pipeline]   Stage 1 (deterministic): no changes")
+        let deterministicResult = textProcessor.processWithDetails(text, config: config, context: context)
+        let preLLMText = deterministicResult.output
+        for stage in deterministicResult.stages {
+            if !stage.enabled {
+                print("[Pipeline]   Stage 1 (\(stage.name)): SKIPPED (disabled)")
+            } else if stage.changed {
+                print("[Pipeline]   Stage 1 (\(stage.name)): \"\(stage.input)\" → \"\(stage.output)\"")
+            } else {
+                print("[Pipeline]   Stage 1 (\(stage.name)): no changes")
+            }
         }
 
         // Step 2: Punctuation model (punct + truecasing)

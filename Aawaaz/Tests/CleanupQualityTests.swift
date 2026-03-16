@@ -962,8 +962,9 @@ final class CleanupQualityTests: XCTestCase {
         let loadTime = CFAbsoluteTimeGetCurrent() - loadStart
         print("Model loaded in \(String(format: "%.2f", loadTime))s\n")
 
-        // Load punct model if available
-        let punctAvailable = PunctuationModelRunner.isAvailable
+        // Load punct model if available (can be disabled via UserDefaults for A/B benchmarking)
+        let punctDisabled = UserDefaults.standard.bool(forKey: "DISABLE_PUNCT_MODEL")
+        let punctAvailable = !punctDisabled && PunctuationModelRunner.isAvailable
         if punctAvailable {
             print("━━━ Loading Punctuation model… ━━━\n")
             let punctLoadStart = CFAbsoluteTimeGetCurrent()
