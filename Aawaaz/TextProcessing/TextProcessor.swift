@@ -21,6 +21,7 @@ struct TextProcessingResult: Sendable {
 /// 1. Self-correction detection (resolve speaker corrections)
 /// 2. Filler word removal (remove "um", "uh", etc.)
 /// 3. Spoken-form normalization (convert "question mark" → "?", etc.)
+/// 4. Number normalization (convert "twenty three" → "23", etc.)
 ///
 /// These run **after** Whisper transcription and **before** any LLM
 /// post-processing. They are fast, deterministic, and work even when
@@ -96,6 +97,14 @@ struct TextProcessor {
         stages.append(TextProcessingStageResult(
             name: "spoken forms", enabled: true,
             input: normInput, output: text
+        ))
+
+        // Step 4: Number normalization (converts spoken numbers to digits)
+        let numberInput = text
+        text = NumberNormalizer.normalize(text)
+        stages.append(TextProcessingStageResult(
+            name: "number normalization", enabled: true,
+            input: numberInput, output: text
         ))
 
         return TextProcessingResult(output: text, stages: stages)
