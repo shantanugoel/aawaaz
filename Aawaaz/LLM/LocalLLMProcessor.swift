@@ -322,7 +322,7 @@ actor LocalLLMProcessor: PostProcessor {
             The user gives you raw dictated text inside <text>...</text> tags.
             Return only the cleaned text. No tags, no explanations.
 
-            The text may already have punctuation and capitalization from a prior stage.
+            The text may already have some punctuation and capitalization from the transcription engine.
             Adjust punctuation and capitalization only if clearly wrong.
             Fix small grammar mistakes.
             Keep the same meaning and almost the same words.

@@ -36,39 +36,6 @@ struct PostProcessingSettingsView: View {
                 }
             }
 
-            // MARK: - Punctuation Model
-            // Punctuation & capitalization is independent of LLM mode — always visible.
-
-            Section("Punctuation & Capitalization") {
-                Toggle("Punctuation Model", isOn: $state.punctuationModelEnabled)
-
-                if appState.punctuationModelEnabled {
-                    if PunctuationModelRunner.isAvailable {
-                        Toggle("Use Neural Engine (ANE)", isOn: $state.punctuationModelUseANE)
-                        Text("ANE accelerates inference. Disable to use CPU only.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Label(
-                            "Model files not found. Download and install the model first.",
-                            systemImage: "exclamationmark.triangle.fill"
-                        )
-                        .foregroundStyle(.orange)
-                        .font(.callout)
-
-                        Text("""
-                        Run in Terminal:
-                        python scripts/setup_punct_model.py
-                        
-                        (from the Aawaaz project root)
-                        """)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-
             // MARK: - Model Selection & Download
 
             if appState.postProcessingMode == .local {

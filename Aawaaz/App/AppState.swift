@@ -124,21 +124,6 @@ final class AppState {
         didSet { UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel") }
     }
 
-    // Punctuation model
-    /// Whether the punctuation model is used in the pipeline (before LLM).
-    var punctuationModelEnabled: Bool = true {
-        didSet {
-            UserDefaults.standard.set(punctuationModelEnabled, forKey: "punctuationModelEnabled")
-            if !punctuationModelEnabled {
-                Task { await pipeline.unloadPunctuationModel() }
-            }
-        }
-    }
-    /// Whether to use Apple Neural Engine (via CoreML EP) for punctuation model inference.
-    var punctuationModelUseANE: Bool = true {
-        didSet { UserDefaults.standard.set(punctuationModelUseANE, forKey: "punctuationModelUseANE") }
-    }
-
     // LLM model management
     var llmModelManager = LLMModelManager()
 
@@ -198,17 +183,14 @@ final class AppState {
             self.selectedLLMModel = LLMModelCatalog.recommendedModel()
         }
 
-        // Restore punctuation model preferences
-        if UserDefaults.standard.object(forKey: "punctuationModelEnabled") != nil {
-            self.punctuationModelEnabled = UserDefaults.standard.bool(forKey: "punctuationModelEnabled")
-        }
-        if UserDefaults.standard.object(forKey: "punctuationModelUseANE") != nil {
-            self.punctuationModelUseANE = UserDefaults.standard.bool(forKey: "punctuationModelUseANE")
-        }
-
         // Restore persisted audio device selection before refreshing so
         // refreshAudioDevices() can clear a stale UID for a disconnected device.
         self.selectedAudioDeviceUID = UserDefaults.standard.string(forKey: "selectedAudioDeviceUID")
+
+        // Clean up defunct punctuation model preferences from prior versions
+        UserDefaults.standard.removeObject(forKey: "punctuationModelEnabled")
+        UserDefaults.standard.removeObject(forKey: "punctuationModelUseANE")
+
         refreshAudioDevices()
         deviceObserver = AudioDeviceObserver { [weak self] in
             self?.refreshAudioDevices()

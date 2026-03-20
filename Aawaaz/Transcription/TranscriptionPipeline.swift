@@ -385,7 +385,6 @@ final class TranscriptionPipeline {
     private let llmProcessor = LocalLLMProcessor()
     private let noOpProcessor = NoOpProcessor()
     private let transliterator = DevanagariTransliterator()
-    private let punctuationRunner = PunctuationModelRunner()
 
     /// Switch the LLM processor to a different model.
     ///
@@ -393,13 +392,6 @@ final class TranscriptionPipeline {
     /// No-op if the requested model is already selected and loaded.
     func switchLLMModel(to model: LLMModel) async throws {
         try await llmProcessor.switchModel(to: model)
-    }
-
-    /// Unload the punctuation model to free memory.
-    ///
-    /// Called when the user disables the punctuation model in settings.
-    func unloadPunctuationModel() async {
-        await punctuationRunner.unload()
     }
 
     /// Pre-load the LLM model so it's ready for the first dictation.
@@ -422,9 +414,8 @@ final class TranscriptionPipeline {
     ///
     /// Chain:
     /// 1. Self-correction detection + filler removal + spoken-form normalization
-    /// 2. Punctuation model (punct + truecasing) — skipped for code/terminal
-    /// 3. LLM cleanup when ``PostProcessingMode`` is `.local` and model is downloaded
-    /// 4. Devanagari → Roman transliteration when LLM is off and Romanized script is selected
+    /// 2. LLM cleanup when ``PostProcessingMode`` is `.local` and model is downloaded
+    /// 3. Devanagari → Roman transliteration when LLM is off and Romanized script is selected
     ///
     /// If LLM processing fails or model is not downloaded, the pre-LLM result is used as fallback.
     private func postProcess(_ text: String, context: InsertionContext) async -> String {
@@ -435,8 +426,6 @@ final class TranscriptionPipeline {
         let hinglishScript = appState?.selectedHinglishScript ?? .romanized
         let llmAvailable = mode == .local
             && (appState?.llmModelManager.isDownloaded(appState?.selectedLLMModel ?? LLMModelCatalog.defaultModel) ?? false)
-        let punctEnabled = appState?.punctuationModelEnabled ?? true
-        let punctUseANE = appState?.punctuationModelUseANE ?? true
 
         // Determine script preference for Hinglish language only (Step 3.7)
         let scriptPreference: HinglishScript? = (language == .hinglish) ? hinglishScript : nil
@@ -445,7 +434,7 @@ final class TranscriptionPipeline {
 
         print("[Pipeline] ── Post-processing start ──")
         print("[Pipeline]   Input: \"\(text)\"")
-        print("[Pipeline]   Context: app=\(context.appCategory) mode=\(mode) punct=\(punctEnabled) ANE=\(punctUseANE) llm=\(llmAvailable) codeCtx=\(isCodeTerminal)")
+        print("[Pipeline]   Context: app=\(context.appCategory) mode=\(mode) llm=\(llmAvailable) codeCtx=\(isCodeTerminal)")
 
         // Step 1: Deterministic text processing (self-correction → fillers → spoken forms)
         let deterministicResult = textProcessor.processWithDetails(text, config: config, context: context)
@@ -460,75 +449,47 @@ final class TranscriptionPipeline {
             }
         }
 
-        // Step 2: Punctuation model (punct + truecasing)
-        // Skip for code/terminal contexts — the model over-capitalizes and adds unwanted periods.
-        var afterPunct = preLLMText
-
-        if punctEnabled && !isCodeTerminal && PunctuationModelRunner.isAvailable {
-            let punctStart = CFAbsoluteTimeGetCurrent()
-            do {
-                try await punctuationRunner.loadModel(useANE: punctUseANE)
-                afterPunct = try await punctuationRunner.predict(preLLMText)
-                let punctLatency = (CFAbsoluteTimeGetCurrent() - punctStart) * 1000
-                let epLabel = await punctuationRunner.usingCoreML ? "CoreML" : "CPU"
-                if afterPunct != preLLMText {
-                    print("[Pipeline]   Stage 2 (punct model): \"\(preLLMText)\" → \"\(afterPunct)\" [\(String(format: "%.1f", punctLatency))ms, \(epLabel)]")
-                } else {
-                    print("[Pipeline]   Stage 2 (punct model): no changes [\(String(format: "%.1f", punctLatency))ms, \(epLabel)]")
-                }
-            } catch {
-                print("[Pipeline]   Stage 2 (punct model): FAILED — \(error.localizedDescription)")
-            }
-        } else {
-            let reasons = [
-                !punctEnabled ? "disabled" : nil,
-                isCodeTerminal ? "code/terminal context" : nil,
-                !PunctuationModelRunner.isAvailable ? "model not found" : nil,
-            ].compactMap { $0 }.joined(separator: ", ")
-            print("[Pipeline]   Stage 2 (punct model): SKIPPED (\(reasons))")
-        }
-
-        // Step 3: LLM post-processing (if enabled AND model is downloaded)
+        // Step 2: LLM post-processing (if enabled AND model is downloaded)
         let processor: PostProcessor = llmAvailable ? llmProcessor : noOpProcessor
 
         if mode == .local && !llmAvailable {
-            print("[Pipeline]   Stage 3 (LLM): SKIPPED — model not downloaded")
+            print("[Pipeline]   Stage 2 (LLM): SKIPPED — model not downloaded")
             await MainActor.run { [weak self] in
                 self?.appState?.pipelineError = "LLM model not downloaded. Download it in Settings → Post-Processing."
             }
         } else if mode == .off {
-            print("[Pipeline]   Stage 3 (LLM): SKIPPED — mode is off")
+            print("[Pipeline]   Stage 2 (LLM): SKIPPED — mode is off")
         }
 
         var result: String
         var llmSucceeded = false
         do {
             result = try await processor.process(
-                rawText: afterPunct,
+                rawText: preLLMText,
                 context: context,
                 cleanupLevel: cleanupLevel,
                 scriptPreference: scriptPreference
             )
             llmSucceeded = llmAvailable
             if llmAvailable {
-                if result != afterPunct {
-                    print("[Pipeline]   Stage 3 (LLM): \"\(afterPunct)\" → \"\(result)\"")
+                if result != preLLMText {
+                    print("[Pipeline]   Stage 2 (LLM): \"\(preLLMText)\" → \"\(result)\"")
                 } else {
-                    print("[Pipeline]   Stage 3 (LLM): no changes")
+                    print("[Pipeline]   Stage 2 (LLM): no changes")
                 }
             }
         } catch {
-            print("[Pipeline]   Stage 3 (LLM): FAILED — \(error.localizedDescription)")
-            result = afterPunct
+            print("[Pipeline]   Stage 2 (LLM): FAILED — \(error.localizedDescription)")
+            result = preLLMText
         }
 
-        // Step 4: Devanagari → Roman transliteration when LLM did not handle it (Step 3.7)
+        // Step 3: Devanagari → Roman transliteration when LLM did not handle it (Step 3.7)
         // When LLM succeeds, it handles script preference via the prompt.
         // When LLM is off or failed, run the deterministic transliterator as fallback.
         if !llmSucceeded, scriptPreference == .romanized, transliterator.containsDevanagari(result) {
             let before = result
             result = transliterator.transliterate(result)
-            print("[Pipeline]   Stage 4 (transliteration): \"\(before)\" → \"\(result)\"")
+            print("[Pipeline]   Stage 3 (transliteration): \"\(before)\" → \"\(result)\"")
         }
 
         print("[Pipeline]   Output: \"\(result)\"")
