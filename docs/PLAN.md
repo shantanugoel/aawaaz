@@ -113,14 +113,14 @@ aawaaz/
 │   │   ├── SettingsView.swift           # Preferences window (tabbed)
 │   │   ├── OnboardingView.swift         # First-launch permission guide
 │   │   ├── ModelDownloadView.swift      # Model browser and download progress
-│   │   ├── DictionarySettingsView.swift # Personal dictionary management UI (Phase 3.5)
-│   │   ├── SnippetSettingsView.swift    # Voice snippets management UI (Phase 3.5)
-│   │   ├── AppOverridesView.swift       # Per-app insertion method & category overrides (Phase 3.5/5)
-│   │   └── StatsView.swift             # Productivity stats card for menu bar popover (Phase 5)
+│   │   ├── DictionarySettingsView.swift # Personal dictionary management UI (Phase 5)
+│   │   ├── SnippetSettingsView.swift    # Voice snippets management UI (Phase 5)
+│   │   ├── AppOverridesView.swift       # Per-app insertion method & category overrides (Phase 5/7)
+│   │   └── StatsView.swift             # Productivity stats card for menu bar popover (Phase 7)
 │   ├── Audio/
 │   │   ├── AudioCaptureManager.swift    # AVAudioEngine setup, mic tap, 16kHz PCM buffer
 │   │   ├── AudioDevice.swift            # Enumerate and select input devices
-│   │   └── MediaController.swift        # Auto-pause/resume media playback (Phase 5)
+│   │   └── MediaController.swift        # Auto-pause/resume media playback (Phase 7)
 │   ├── VAD/
 │   │   ├── VADProcessor.swift           # Silero VAD wrapper, speech boundary detection
 │   │   └── VADState.swift               # Speech start/end state machine
@@ -133,7 +133,7 @@ aawaaz/
 │   │   ├── TextProcessor.swift          # Orchestrates pre-LLM text cleaning pipeline
 │   │   ├── FillerWordRemover.swift      # Regex-based filler word removal with word boundaries
 │   │   ├── SelfCorrectionDetector.swift # Detects "actually no X" / "I mean X" patterns
-│   │   └── SnippetExpander.swift        # Voice shortcut trigger → expansion replacement (Phase 3.5)
+│   │   └── SnippetExpander.swift        # Voice shortcut trigger → expansion replacement (Phase 5)
 │   ├── PostProcessing/
 │   │   ├── PostProcessor.swift          # Protocol: process(rawText, context) → cleanedText
 │   │   ├── LocalLLMProcessor.swift      # llama.cpp-based cleanup
@@ -145,11 +145,11 @@ aawaaz/
 │   │   ├── KeystrokeSimulator.swift     # CGEventPost: simulate typing/paste
 │   │   ├── InsertionContext.swift       # Context: app name, bundle ID, field type, appCategory
 │   │   ├── ClipboardManager.swift       # NSPasteboard: copy and paste
-│   │   └── InsertionHistory.swift       # Ring buffer of last N insertions for undo (Phase 4)
+│   │   └── InsertionHistory.swift       # Ring buffer of last N insertions for undo (Phase 6)
 │   ├── Hotkey/
 │   │   ├── HotkeyManager.swift          # Register/unregister global shortcuts
 │   │   └── HotkeyConfiguration.swift    # Key + modifiers + mode (hold/toggle)
-│   ├── Dictionary/                      # NEW — Personal dictionary & word boosting (Phase 3.5)
+│   ├── Dictionary/                      # NEW — Personal dictionary & word boosting (Phase 5)
 │   │   ├── DictionaryStore.swift        # SQLite/JSON store for custom words, corrections, contact names
 │   │   ├── DictionaryEntry.swift        # Data model: correctSpelling, misspellings[], source, etc.
 │   │   ├── AutoLearnManager.swift       # Detect user corrections post-insertion, suggest additions
@@ -427,7 +427,7 @@ aawaaz/
 - They use **custom fine-tuned Hinglish models** (we plan IndicWhisper in Phase 5)
 - **Session-level language priority** — user sets 2-3 languages (we have language mode selector)
 - **LLM post-processing** normalizes script inconsistencies (our Phase 3)
-- **Learns from corrections** over time (our auto-learn in Phase 3.5)
+- **Learns from corrections** over time (our auto-learn in Phase 5)
 
 **Long-term** (Phase 5): Evaluate fine-tuned models like [Whisper-Hindi2Hinglish](https://huggingface.co/Oriserve/Whisper-Hindi2Hinglish-Prime) converted to GGML, and IndicWhisper from AI4Bharat
 
@@ -584,11 +584,85 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 
 ---
 
-### Phase 3.5: Dictionary, Word Boosting & Text Intelligence
+### Phase 4: FluidAudio Integration (Parakeet ASR + Silero VAD)
+
+**Goal**: Integrate FluidAudio SDK to gain faster, more accurate English ASR via Parakeet models on the Apple Neural Engine, replace the ONNX Runtime dependency with FluidAudio's CoreML-based Silero VAD, and adopt Inverse Text Normalization (ITN) for better text formatting — all while preserving whisper.cpp as the backend for Hindi/Hinglish.
+
+**Context & rationale**: FluidAudio is a Swift-native SDK that runs frontier CoreML audio models on Apple Silicon's Neural Engine. Benchmarks show Parakeet TDT v3 at ~6x faster inference than whisper.cpp with better English accuracy (6.3% vs 7.4% WER). Its built-in Silero VAD runs on CoreML (not ONNX Runtime), enabling us to drop the `onnxruntime-swift` dependency entirely. However, Parakeet does not support Hindi/Hinglish, so whisper.cpp must be retained for those languages.
+
+#### Step 4.1: Engine Abstraction Layer
+
+- [ ] Create a `TranscriptionEngine` protocol to abstract the ASR backend
+- [ ] Wrap current `WhisperManager` behind the new protocol
+- [ ] Implement `FluidAudioTranscriptionEngine` conforming to the same protocol
+- [ ] Update `TranscriptionPipeline` to depend on the protocol, not a concrete engine
+- [ ] Engine selection logic: English → FluidAudio (if available), Auto/Hindi/Hinglish → whisper.cpp
+- [ ] Add engine selection UI to Settings (auto / force-whisper / force-fluidaudio)
+
+#### Step 4.2: FluidAudio Parakeet Batch ASR (English)
+
+- [ ] Add FluidAudio SPM dependency (`FluidAudio` product only — NOT `FluidAudioTTS` which is GPL-3.0)
+- [ ] Implement batch transcription using Parakeet TDT v3 for English
+- [ ] Handle CoreML model download and caching (FluidAudio manages its own model assets)
+- [ ] Map FluidAudio results to existing `TranscriptionResult` type
+- [ ] Prewarm CoreML models on app launch to avoid cold-start compilation latency
+- [ ] Benchmark end-to-end latency (hotkey → text inserted) vs current whisper.cpp path on real dictation tasks
+- [ ] Validate accuracy on Aawaaz's test corpus: English email, chat, code, technical terms
+
+#### Step 4.3: Migrate VAD from ONNX Runtime to FluidAudio
+
+- [ ] Replace `VADProcessor.swift` (ONNX-based) with FluidAudio's Silero VAD API
+- [ ] Verify FluidAudio VAD supports fine-grained chunking (current: 32ms hop / 512 samples) — test end-of-speech latency carefully
+- [ ] Migrate VAD state machine parameters (300ms silence padding, 250ms min speech, 15s max speech) or use FluidAudio's built-in segmentation with equivalent config
+- [ ] Remove `onnxruntime-swift-package-manager` SPM dependency
+- [ ] Remove bundled `silero_vad.onnx` from app resources
+- [ ] Run regression tests: ensure VAD boundary detection quality is equivalent or better
+
+#### Step 4.4: Inverse Text Normalization (ITN)
+
+- [ ] Adopt FluidAudio's ITN pipeline as a post-ASR normalization step
+- [ ] ITN converts spoken forms to written forms: "two hundred dollars" → "$200", "january fifth" → "January 5th"
+- [ ] Wire ITN into `TextProcessor.process()` — runs after ASR, before filler removal / LLM cleanup
+- [ ] ITN should apply to all engines (both FluidAudio and whisper.cpp output)
+- [ ] Validate ITN quality on common dictation patterns (numbers, dates, currency, email addresses, phone numbers)
+- [ ] Note: ITN handles number/date/currency normalization but does NOT replace punctuation restoration — Whisper prompt conditioning and LLM cleanup still handle that
+
+#### Step 4.5: Streaming English ASR with Parakeet EOU (Exploratory)
+
+- [ ] Evaluate Parakeet EOU (120M, English-only) for live streaming dictation
+- [ ] EOU provides built-in end-of-utterance detection (160-320ms latency) — could simplify or bypass VAD for English
+- [ ] Prototype a streaming mode: show live transcript in overlay as user speaks, finalize on EOU signal
+- [ ] Compare UX: current "batch after silence" vs "streaming with live preview"
+- [ ] If streaming UX is significantly better, add a "Live preview" toggle in Settings (English-only)
+- [ ] Keep current VAD-segmented batch mode as default and for all non-English languages
+
+#### Step 4.6: Model Management Updates
+
+- [ ] Update `ModelCatalog` and `ModelManager` to handle dual-engine model assets
+- [ ] FluidAudio models are CoreML bundles managed by FluidAudio's own loader — different from GGML files
+- [ ] Update Models settings tab to show both Whisper models and FluidAudio model status
+- [ ] Handle model download progress for FluidAudio models
+- [ ] Show clear indication of which engine each model is for
+
+#### Step 4.7: Settings & UX Updates
+
+- [ ] Add "Transcription Engine" section to Settings:
+  - [ ] Engine mode picker: Auto (recommended) / Whisper Only / FluidAudio Only
+  - [ ] "Auto" explanation: "Uses FluidAudio for English (faster, more accurate) and Whisper for Hindi/Hinglish"
+  - [ ] Show active engine in overlay during transcription (subtle indicator)
+- [ ] Update overlay to indicate which engine is processing (e.g., small icon or label)
+- [ ] If FluidAudio models aren't downloaded yet, gracefully fall back to whisper.cpp with a one-time prompt to download
+- [ ] Performance comparison in Settings: show last transcription's engine + latency
+
+**Phase 4 deliverable**: English dictation is significantly faster and more accurate via FluidAudio Parakeet on the Neural Engine. ONNX Runtime dependency is removed in favor of FluidAudio's CoreML-based Silero VAD. ITN improves text formatting for numbers, dates, and currencies. Hindi/Hinglish continues to work via whisper.cpp. Users can control engine selection in Settings.
+
+---
+
+### Phase 5: Dictionary, Word Boosting & Text Intelligence
 
 **Goal**: Improve transcription accuracy via personal dictionary and word boosting, add voice shortcuts, and enable per-app tone/context matching.
 
-#### Step 3.5.1: Personal Dictionary Store
+#### Step 5.1: Personal Dictionary Store
 
 - [ ] Create `Dictionary/` directory under Aawaaz/
 - [ ] `Dictionary/DictionaryEntry.swift` — Data model:
@@ -624,7 +698,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Entry count and source breakdown (manual / auto-learned / contacts)
 - [ ] Add "Dictionary" tab to SettingsView
 
-#### Step 3.5.2: Contacts Import
+#### Step 5.2: Contacts Import
 
 - [ ] `Dictionary/ContactsImporter.swift`:
   - [ ] Request Contacts permission via `CNContactStore.requestAccess(for: .contacts)`
@@ -636,7 +710,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Add `NSContactsUsageDescription` to Info.plist: "Aawaaz can import contact names to improve transcription accuracy for names."
 - [ ] Make contacts import opt-in and clearly explained in UI
 
-#### Step 3.5.3: Word Boosting via Whisper initial_prompt
+#### Step 5.3: Word Boosting via Whisper initial_prompt
 
 - [ ] `Dictionary/WordBooster.swift`:
   - [ ] Query `DictionaryStore` for top N entries by recency + frequency (N = configurable, default 50, max ~200 due to 224-token initial_prompt limit)
@@ -657,7 +731,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Benchmark: compare transcription accuracy with and without word boosting on a test set of names and jargon
 - [ ] Update `TranscriptionPipeline.swift` to pass word booster prompt to WhisperManager
 
-#### Step 3.5.4: Post-Whisper Dictionary Correction
+#### Step 5.4: Post-Whisper Dictionary Correction
 
 - [ ] After Whisper returns text, scan for known misspellings in `DictionaryStore`
   - [ ] For each word in the transcription, check against `misspellings[]` of all entries
@@ -665,7 +739,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Use case-insensitive matching, preserve original capitalization pattern
 - [ ] Wire this as a step in `TextProcessor.process()` — runs after filler removal, before LLM
 
-#### Step 3.5.5: Auto-Learn from User Corrections
+#### Step 5.5: Auto-Learn from User Corrections
 
 - [ ] `Dictionary/AutoLearnManager.swift`:
   - [ ] Strategy 1 (AX-based): After text insertion, monitor `kAXValueAttribute` changes on the focused element for ~5 seconds. If user edits the just-inserted text, compare old vs. new to detect corrections
@@ -677,7 +751,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Store pending suggestions for later review in DictionarySettingsView
 - [ ] Add "Auto-learn corrections" toggle in Settings (default: on)
 
-#### Step 3.5.6: Voice Shortcuts / Snippet Expansion
+#### Step 5.6: Voice Shortcuts / Snippet Expansion
 
 - [ ] `TextProcessing/SnippetExpander.swift`:
   - [ ] Data model:
@@ -702,7 +776,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Built-in examples: "my email", "my address", "zoom link", "my phone"
 - [ ] Add "Snippets" tab to SettingsView
 
-#### Step 3.5.7: Tone/Context Matching per App
+#### Step 5.7: Tone/Context Matching per App
 
 - [ ] Extend `InsertionContext.swift` with `appCategory`:
   ```swift
@@ -743,19 +817,19 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Store overrides in UserDefaults (key: `appCategory.{bundleID}`)
 - [ ] Add "Per-App" tab to SettingsView
 
-**Phase 3.5 deliverable**: Personal dictionary improves Whisper accuracy for names and jargon. Voice shortcuts expand trigger phrases into full text. Per-app tone matching adjusts LLM output style to the target application.
+**Phase 5 deliverable**: Personal dictionary improves Whisper accuracy for names and jargon. Voice shortcuts expand trigger phrases into full text. Per-app tone matching adjusts LLM output style to the target application.
 
 ---
 
-### Phase 4: Voice Commands & Undo
+### Phase 6: Voice Commands & Undo
 
 **Goal**: Detect and execute editing commands spoken by the user, enable undo of last dictation, and support highlight-and-voice-edit workflows.
 
-#### Step 4.1: Pattern-Matched Commands
+#### Step 6.1: Pattern-Matched Commands
 
 - [ ] Define command vocabulary:
   - "delete that" / "undo" → Cmd+Z
-  - "undo that" → Trigger undo of last dictation (see Step 4.3)
+  - "undo that" → Trigger undo of last dictation (see Step 6.3)
   - "new line" / "enter" → Insert \n
   - "new paragraph" → Insert \n\n
   - "select all" → Cmd+A
@@ -767,14 +841,14 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Execute via CGEvent keystroke simulation
 - [ ] Visual feedback in overlay (show command name, not the spoken text)
 
-#### Step 4.2: LLM-Interpreted Commands
+#### Step 6.2: LLM-Interpreted Commands
 
 - [ ] Enhanced LLM prompt that can return either text or a command
 - [ ] JSON-structured output: `{"type": "text", "content": "..."}` or `{"type": "command", "action": "...", "params": {...}}`
 - [ ] Command execution engine that maps LLM output to system actions
 - [ ] Support complex commands: "make that bold" (Cmd+B), "move to the beginning" (Cmd+Up), etc.
 
-#### Step 4.3: Undo Last Dictation
+#### Step 6.3: Undo Last Dictation
 
 - [ ] `TextInsertion/InsertionHistory.swift`:
   - [ ] Ring buffer storing last N insertions (default N=10):
@@ -797,10 +871,10 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] On trigger: call `TextInsertionManager.undoLastInsertion()`
   - [ ] Show overlay: "Undone: [truncated text]"
 - [ ] Voice command integration:
-  - [ ] "undo that" / "delete that" triggers undo (from Step 4.1 command vocabulary)
+  - [ ] "undo that" / "delete that" triggers undo (from Step 6.1 command vocabulary)
   - [ ] Must detect these before the transcription is inserted (check commands first)
 
-#### Step 4.4: LLM Command Mode (Highlight + Voice Edit)
+#### Step 6.4: LLM Command Mode (Highlight + Voice Edit)
 
 - [ ] Register a secondary hotkey for "command mode" (default: Cmd+Shift+D, configurable)
 - [ ] On activation:
@@ -825,13 +899,13 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Error handling: if AX can't read selection, show error and suggest using a compatible app
 - [ ] This requires LLM to be enabled (local or remote) — show a helpful message if LLM is off
 
-**Phase 4 deliverable**: Users can speak commands to control editing, undo last dictation via hotkey or voice, and apply voice-driven edits to selected text.
+**Phase 6 deliverable**: Users can speak commands to control editing, undo last dictation via hotkey or voice, and apply voice-driven edits to selected text.
 
 ---
 
-### Phase 5: Polish, UX Enhancements & Multi-Language Expansion
+### Phase 7: Polish, UX Enhancements & Multi-Language Expansion
 
-#### Step 5.1: Sound Effects
+#### Step 7.1: Sound Effects
 
 - [ ] Create `SoundEffects/` directory
 - [ ] `SoundEffects/SoundEffectManager.swift`:
@@ -851,7 +925,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] Successful insertion → play success sound
   - [ ] Pipeline error → play error sound
 
-#### Step 5.2: Auto-Pause Media
+#### Step 7.2: Auto-Pause Media
 
 - [ ] `Audio/MediaController.swift`:
   - [ ] On dictation start: send system media pause key event via `CGEventPost` using `NX_KEYTYPE_PLAY` (IOKit HID event)
@@ -861,7 +935,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Toggle in Settings (default: off)
 - [ ] Add to General Settings tab: "Pause media during dictation" toggle
 
-#### Step 5.3: Whisper/Quiet Mode
+#### Step 7.3: Whisper/Quiet Mode
 
 - [ ] Add `whisperMode: Bool` toggle to `AppState`
 - [ ] When enabled:
@@ -872,9 +946,9 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Menu bar toggle: microphone icon changes to indicate quiet mode
 - [ ] Settings: "Quiet mode" toggle with brief explanation
 
-#### Step 5.4: Per-App Insertion Method Override (Settings UI)
+#### Step 7.4: Per-App Insertion Method Override (Settings UI)
 
-- [ ] `Views/AppOverridesView.swift` (if not already created in Phase 3.5):
+- [ ] `Views/AppOverridesView.swift` (if not already created in Phase 5):
   - [ ] List of apps that have been used with Aawaaz (tracked from `InsertionContext` history)
   - [ ] For each app: dropdown to select insertion method: Auto / AX API / Clipboard Paste / Keystroke Simulation
   - [ ] Pre-populate known problematic apps:
@@ -884,7 +958,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
   - [ ] "Reset to Auto" button per app
   - [ ] This surfaces the existing `TextInsertionManager.setPreferredMethod()` API as a user-facing setting
 
-#### Step 5.5: Model Auto-Update Notifications
+#### Step 7.5: Model Auto-Update Notifications
 
 - [ ] `Models/ModelUpdateChecker.swift`:
   - [ ] On app launch (and optionally every 24h), fetch a remote JSON manifest from a hosted URL
@@ -906,7 +980,7 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Add "Check for model updates" button in Models Settings tab
 - [ ] Privacy: the manifest fetch is the only network call in the app (besides model downloads and remote LLM if enabled). No telemetry, no user data sent.
 
-#### Step 5.6: Productivity Stats
+#### Step 7.6: Productivity Stats
 
 - [ ] Create `Stats/` directory
 - [ ] `Stats/StatsTracker.swift`:
@@ -927,42 +1001,42 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 - [ ] Optional: weekly summary notification (local notification every Sunday with week's stats)
 - [ ] Settings toggle: "Show stats in menu bar" (default: on)
 
-#### Step 5.7: UX Polish
+#### Step 7.7: UX Polish
 
 - [ ] Refined overlay design (glassmorphic, matches macOS aesthetic)
 - [ ] Transcription history viewer (searchable, with timestamps)
 - [ ] Audio waveform visualization during recording
 - [ ] Menubar icon animation during recording/processing
 
-#### Step 5.8: Performance Optimization
+#### Step 7.8: Performance Optimization
 
-- [ ] Profile and optimize the VAD → Whisper pipeline
+- [ ] Profile and optimize the VAD → ASR pipeline (both Whisper and FluidAudio paths)
 - [ ] Implement interim results (show partial transcription while still speaking)
-- [ ] Pre-warm whisper.cpp model on app launch (optional, uses more RAM)
-- [ ] Benchmark and optimize CoreML conversion for VAD
-- [ ] Explore CoreML conversion for Whisper models (ANE acceleration)
+- [ ] Pre-warm Whisper model on app launch (optional, uses more RAM)
+- [ ] Pre-warm FluidAudio CoreML models on app launch (avoid cold-start ANE compilation)
+- [ ] Benchmark and compare engine performance across model sizes
 
-#### Step 5.9: IndicWhisper Integration
+#### Step 7.9: IndicWhisper Integration
 
 - [ ] Convert AI4Bharat IndicWhisper models to GGML format
 - [ ] Benchmark against vanilla Whisper turbo/large-v3 on Hinglish test set
 - [ ] Add as downloadable model option if performance is better
 - [ ] Document conversion process for community contributions
 
-#### Step 5.10: Additional Languages
+#### Step 7.10: Additional Languages
 
 - [ ] Language-specific model recommendations in ModelCatalog
 - [ ] Test and validate top 10 languages by user demand
 - [ ] Community contribution pipeline for language-specific fine-tuned models
 
-#### Step 5.11: Custom Fine-Tuning (Advanced)
+#### Step 7.11: Custom Fine-Tuning (Advanced)
 
 - [ ] Document LoRA fine-tuning process for Hinglish
 - [ ] Provide sample training data format
 - [ ] MLX-based fine-tuning script that runs on Apple Silicon
 - [ ] Model export to GGML format for use in Aawaaz
 
-**Phase 5 deliverable**: A polished, feature-rich dictation app with sound feedback, productivity stats, quiet mode, media auto-pause, model updates, and strong multi-language support.
+**Phase 7 deliverable**: A polished, feature-rich dictation app with sound feedback, productivity stats, quiet mode, media auto-pause, model updates, and strong multi-language support.
 
 ---
 
@@ -973,20 +1047,24 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 | — | Default hotkey change (Fn/Ctrl) + hold-to-talk default | 2.5 | Foundation-level change. Should land before new pipeline work. Low risk. |
 | — | Listening/processing indicator overhaul (waveform/bubble) | 2.5 | UX feedback is core to the dictation experience. Improves all subsequent phases. |
 | — | Pipeline rearchitecture (process-then-insert) | 3 (Step 3.0) | Prerequisite for all post-processing. Text must only be inserted after full chain completes. |
-| 1 | Personal Dictionary with Auto-Learn | 3.5 | Depends on Whisper pipeline (Phase 1-2 ✅). Independent of LLM. Enables word boosting. |
-| 2 | Word Boosting via initial_prompt | 3.5 | Depends on dictionary store. Modifies WhisperManager.transcribe() params. |
+| — | FluidAudio Parakeet ASR (English fast path) | 4 (Step 4.2) | Faster + more accurate English ASR via ANE. Preserves whisper.cpp for Hindi/Hinglish. |
+| — | Migrate VAD from ONNX to FluidAudio CoreML | 4 (Step 4.3) | Drops onnxruntime dependency. Same Silero model, better runtime for Apple Silicon. |
+| — | Inverse Text Normalization (ITN) | 4 (Step 4.4) | Post-ASR normalization. Partially replaces punctuation model. Works with both engines. |
+| — | Streaming English ASR (Parakeet EOU) | 4 (Step 4.5) | Exploratory. Could enable live preview dictation for English. |
+| 1 | Personal Dictionary with Auto-Learn | 5 | Depends on Whisper pipeline (Phase 1-2 ✅). Independent of LLM. Enables word boosting. |
+| 2 | Word Boosting via initial_prompt | 5 | Depends on dictionary store. Modifies WhisperManager.transcribe() params. |
 | 3 | Pre-LLM Filler Word Removal | 3 (Step 3.1) | Runs before LLM, works without LLM. Part of text processing pipeline. |
 | 4 | Self-Correction Detection | 3 (Step 3.1) | Same pipeline stage as filler removal. Pre-LLM text processing. |
-| 5 | Tone/Context Matching per App | 3.5 (Step 3.5.7) | Extends InsertionContext. Affects LLM prompts (Phase 3). |
-| 6 | Voice Shortcuts / Snippet Expansion | 3.5 (Step 3.5.6) | Runs in text processing pipeline. Independent of LLM and voice commands. |
-| 7 | Whisper/Quiet Mode | 5 (Step 5.3) | UX enhancement. Modifies audio pipeline gain. Low dependency. |
-| 8 | Auto-Pause Media | 5 (Step 5.2) | UX polish. Independent of transcription pipeline. |
-| 9 | Productivity Stats | 5 (Step 5.6) | Observes pipeline events. No impact on core flow. Polish feature. |
-| 10 | Undo Last Dictation | 4 (Step 4.3) | Natural extension of voice commands ("undo that"). Requires insertion history. |
-| 11 | LLM Command Mode (Highlight+Edit) | 4 (Step 4.4) | Enhancement to Phase 4 voice commands. Requires LLM (Phase 3). |
-| 12 | Sound Effects | 5 (Step 5.1) | Pure UX polish. No dependencies. |
-| 13 | Per-App Insertion Method Override | 5 (Step 5.4) | Settings UI for existing code. Low priority polish. |
-| 14 | Model Auto-Update Notifications | 5 (Step 5.5) | Nice-to-have. Only network feature besides downloads/remote LLM. |
+| 5 | Tone/Context Matching per App | 5 (Step 5.7) | Extends InsertionContext. Affects LLM prompts (Phase 3). |
+| 6 | Voice Shortcuts / Snippet Expansion | 5 (Step 5.6) | Runs in text processing pipeline. Independent of LLM and voice commands. |
+| 7 | Whisper/Quiet Mode | 7 (Step 7.3) | UX enhancement. Modifies audio pipeline gain. Low dependency. |
+| 8 | Auto-Pause Media | 7 (Step 7.2) | UX polish. Independent of transcription pipeline. |
+| 9 | Productivity Stats | 7 (Step 7.6) | Observes pipeline events. No impact on core flow. Polish feature. |
+| 10 | Undo Last Dictation | 6 (Step 6.3) | Natural extension of voice commands ("undo that"). Requires insertion history. |
+| 11 | LLM Command Mode (Highlight+Edit) | 6 (Step 6.4) | Enhancement to Phase 6 voice commands. Requires LLM (Phase 3). |
+| 12 | Sound Effects | 7 (Step 7.1) | Pure UX polish. No dependencies. |
+| 13 | Per-App Insertion Method Override | 7 (Step 7.4) | Settings UI for existing code. Low priority polish. |
+| 14 | Model Auto-Update Notifications | 7 (Step 7.5) | Nice-to-have. Only network feature besides downloads/remote LLM. |
 | — | Fix Hindi→English translation in Hinglish mode | 2.5 (Step 2.5.3) | Active bug. Whisper translates Hindi instead of transcribing. Quick params fix + initial_prompt biasing. |
 
 ---
@@ -1010,16 +1088,32 @@ These steps run **after** Whisper and **before** LLM. They are fast, determinist
 
 Same reasoning as above. Same developer ecosystem, same model format, same Swift integration patterns. Consistency reduces learning surface.
 
-### Why ONNX Runtime for Silero VAD (not CoreML)?
+### Why ONNX Runtime for Silero VAD (not CoreML)? → Migrating to FluidAudio in Phase 4
 
-| Factor | ONNX Runtime | CoreML |
-|--------|-------------|--------|
-| Setup | Add SPM package, load .onnx file | Convert model, handle .mlmodel compilation |
-| Compatibility | Silero ships .onnx natively | Manual conversion (may have issues) |
-| Performance | Fast enough (sub-ms per frame) | Slightly faster (ANE) but overkill for 2MB model |
+| Factor | ONNX Runtime | CoreML (via FluidAudio) |
+|--------|-------------|-------------------------|
+| Setup | Add SPM package, load .onnx file | Part of FluidAudio SDK |
+| Compatibility | Silero ships .onnx natively | FluidAudio converts via Möbius tooling |
+| Performance | Fast enough (sub-ms per frame) | Comparable (<2ms), runs on ANE |
 | Debugging | Standard ONNX tooling | Apple-specific tooling |
+| Dependency | Adds onnxruntime-swift (large binary) | No extra dependency (included in FluidAudio) |
 
-**Decision**: Start with ONNX Runtime for simplicity. Migrate to CoreML later if needed for performance (unlikely — VAD is not the bottleneck).
+**Decision**: Started with ONNX Runtime for simplicity (Phase 1). Migrating to FluidAudio's CoreML-based Silero VAD in Phase 4 to drop the ONNX dependency and unify the audio ML stack.
+
+### Why FluidAudio alongside whisper.cpp (not replacing it)?
+
+| Factor | whisper.cpp | FluidAudio (Parakeet) |
+|--------|------------|----------------------|
+| English accuracy | 7.4% WER (large-v3) | 6.3% WER (TDT v3) |
+| English speed | ~1.2s (M4 benchmark) | ~0.2s (M4 benchmark, ~6x faster) |
+| Hindi/Hinglish | ✅ Supported (100+ languages) | ❌ Not supported (25 European only) |
+| Streaming ASR | Not in current path | Built-in EOU with 160-320ms latency |
+| Prompt conditioning | ✅ initial_prompt for vocabulary/context | CTC vocabulary boosting only |
+| Memory | ~2.5 GB (turbo) | ~100 MB |
+| Runtime | Metal/CPU via XCFramework | CoreML on Apple Neural Engine |
+| API | C API with Swift actor wrapper | Native Swift async/await |
+
+**Decision**: Hybrid approach. FluidAudio for English (faster, more accurate, lower memory, ANE-native). whisper.cpp retained for Hindi/Hinglish (only viable option for these languages). Engine abstraction allows automatic selection based on language mode.
 
 ### Why not use Apple's Speech Framework as a fallback?
 
@@ -1027,6 +1121,7 @@ Same reasoning as above. Same developer ecosystem, same model format, same Swift
 - Less accurate than Whisper for non-English
 - Could be offered as an ultra-low-latency option for English-only mode in the future
 - Not worth the complexity of maintaining two transcription backends in MVP
+- **Future consideration**: Apple's SpeechAnalyzer API (WWDC 2025) is extremely fast and zero-dependency, but requires macOS 26+ and only supports ~10 languages. When Aawaaz eventually raises its minimum target to macOS 26, SpeechAnalyzer should be evaluated as a potential English path replacement
 
 ### Hold-to-talk vs. Toggle: Default?
 
@@ -1047,24 +1142,25 @@ For long continuous speech without pauses, impose a maximum segment duration of 
 
 | Package | Source | Purpose | Phase |
 |---------|--------|---------|-------|
-| whisper.cpp | github.com/ggerganov/whisper.cpp | Transcription engine (XCFramework) | 1 ✅ |
-| onnxruntime-swift | Microsoft | Silero VAD inference | 1 ✅ |
-| llama.cpp | github.com/ggerganov/llama.cpp | Local LLM post-processing (GGUF models) | 3 |
-| SQLite.swift (or GRDB) | github.com/groue/GRDB.swift | Dictionary store, stats DB, snippets persistence | 3.5 |
-| Contacts framework | Apple (system) | CNContactStore for name import | 3.5 |
-| MediaPlayer framework | Apple (system) | MRMediaRemoteGetNowPlayingInfo for auto-pause detection | 5 |
-| IOKit | Apple (system) | NX_KEYTYPE_PLAY media key events | 5 |
-| UserNotifications | Apple (system) | Model update notifications, weekly stats summary | 5 |
+| whisper.cpp | github.com/ggerganov/whisper.cpp | Transcription engine for Hindi/Hinglish (XCFramework) | 1 ✅ |
+| onnxruntime-swift | Microsoft | Silero VAD inference (removed in Phase 4) | 1 ✅ → removed in 4 |
+| FluidAudio | github.com/FluidInference/FluidAudio | Parakeet ASR (English), Silero VAD (CoreML), ITN | 4 |
+| mlx-swift-lm | github.com/ml-explore/mlx-swift-lm | Local LLM post-processing | 3 ✅ |
+| SQLite.swift (or GRDB) | github.com/groue/GRDB.swift | Dictionary store, stats DB, snippets persistence | 5 |
+| Contacts framework | Apple (system) | CNContactStore for name import | 5 |
+| MediaPlayer framework | Apple (system) | MRMediaRemoteGetNowPlayingInfo for auto-pause detection | 7 |
+| IOKit | Apple (system) | NX_KEYTYPE_PLAY media key events | 7 |
+| UserNotifications | Apple (system) | Model update notifications, weekly stats summary | 7 |
 
-Six external dependencies total (whisper.cpp, onnxruntime-swift, llama.cpp, SQLite/GRDB). The rest are Apple system frameworks requiring no additional downloads.
+Six external dependencies at peak (whisper.cpp, onnxruntime-swift, FluidAudio, mlx-swift-lm, SQLite/GRDB). After Phase 4 completes, onnxruntime-swift is removed, leaving five. The rest are Apple system frameworks requiring no additional downloads.
 
 ## Risk Mitigation
 
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|------------|
 | Hinglish accuracy insufficient | Medium | High | Test early (Phase 1). IndicWhisper models as fallback. LoRA fine-tuning as escape hatch |
-| Whisper translates Hindi instead of transcribing | High | High | Set `params.translate = false` explicitly. For Hinglish mode, set language to `"hi"` instead of auto-detect. Use initial_prompt with Romanized Hindi samples to bias output script. LLM post-processing as safety net (Phase 3). Fine-tuned Hinglish models long-term (Phase 5) |
-| AX API doesn't work in some apps | High | Medium | Keystroke simulation fallback. Per-app override settings (Phase 5.4 UI). Document known incompatible apps |
+| Whisper translates Hindi instead of transcribing | High | High | Set `params.translate = false` explicitly. For Hinglish mode, set language to `"hi"` instead of auto-detect. Use initial_prompt with Romanized Hindi samples to bias output script. LLM post-processing as safety net (Phase 3). Fine-tuned Hinglish models long-term (Phase 7) |
+| AX API doesn't work in some apps | High | Medium | Keystroke simulation fallback. Per-app override settings (Phase 7.4 UI). Document known incompatible apps |
 | whisper.cpp Swift bindings have issues | Low | High | Well-established bindings, SwiftUI example in repo. Fallback: use C API directly from Swift |
 | LLM over-corrects transcription | Medium | Medium | Configurable cleanup levels. Show raw vs. cleaned text. Pre-LLM text processing handles basics without LLM |
 | Memory pressure on 8GB machines | Medium | Medium | Default to Qwen 3 0.6B (~0.4 GB) + Whisper turbo (~2.5 GB) ≈ ~3 GB total. Smart model loading/unloading. Never load full Whisper + large LLM simultaneously on 8GB |
@@ -1077,6 +1173,10 @@ Six external dependencies total (whisper.cpp, onnxruntime-swift, llama.cpp, SQLi
 | LLM Command Mode (highlight+edit) requires complex AX interaction | Medium | Medium | Fallback to paste if AX selection reading fails. Require LLM to be enabled. Show helpful error messages for incompatible apps |
 | Model update manifest hosting | Low | Medium | Start with a static JSON file on GitHub Pages or similar. No server infrastructure needed. Graceful failure if unreachable |
 | Filler word removal false positives | Low | Medium | Word-boundary regex prevents "I like dogs" → "I dogs". Multi-word phrase matching handles "you know" as unit. Configurable word list lets users remove problematic entries |
+| FluidAudio API churn (pre-1.0) | Medium | Medium | Pin SPM version. Wrap behind `TranscriptionEngine` protocol. Review release notes before updating |
+| FluidAudio Parakeet lacks Hindi/Hinglish | High | High | Retain whisper.cpp for Hindi/Hinglish. Engine abstraction auto-selects based on language. Monitor Parakeet language expansion |
+| CoreML cold-start compilation latency | Medium | Medium | Prewarm FluidAudio models on app launch. First inference may be slow; subsequent ones are fast |
+| FluidAudio VAD latency regression vs current ONNX | Medium | Medium | Benchmark end-of-speech latency carefully before replacing current VAD. FluidAudio docs show coarser chunk examples — verify fine-grained support |
 
 ## Development Environment Setup
 
